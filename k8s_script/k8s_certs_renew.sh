@@ -1,4 +1,3 @@
-cat k8s-certs-renew.sh
 #!/bin/bash
 
 echo "## Expiration before renewal ##"
@@ -12,6 +11,9 @@ echo "## Restarting control plane pods managed by kubeadm ##"
 
 echo "## Updating /root/.kube/config ##"
 cp /etc/kubernetes/admin.conf /root/.kube/config
+
+echo "## Copy /root/.kube/config ##"
+cp /etc/kubernetes/admin.conf /home/oozoo/.kube/config
 
 echo "## Waiting for apiserver to be up again ##"
 until printf "" 2>>/dev/null >>/dev/tcp/127.0.0.1/6443; do sleep 1; done
