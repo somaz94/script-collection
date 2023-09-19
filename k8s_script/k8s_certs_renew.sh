@@ -13,7 +13,7 @@ echo "## Updating /root/.kube/config ##"
 cp /etc/kubernetes/admin.conf /root/.kube/config
 
 echo "## Copy /root/.kube/config ##"
-cp /etc/kubernetes/admin.conf /home/oozoo/.kube/config
+cp /etc/kubernetes/admin.conf $HOME/.kube/config
 
 echo "## Waiting for apiserver to be up again ##"
 until printf "" 2>>/dev/null >>/dev/tcp/127.0.0.1/6443; do sleep 1; done
