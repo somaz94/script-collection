@@ -17,13 +17,13 @@ DEBUG=N
 ##################################
 
 # FrontEnd - 2 (SUCCESS)
-ARRAY_MS+=("app-user-portal" "admin-portal")
+ARRAY_MS+=("" "")
 # Application BackEnd - 12 (SUCCESS)
-ARRAY_MS+=("app-api-gateway" "app-file-server" "app-ms-auth" "app-ms-legacy" "app-ms-operation" "app-ms-pushserver" "app-ms-resource" "app-ms-system" "app-ms-user" "app-resource-scheduler" "app-ms-audit" "app-ms-scheduler" "app-log-collector")
+ARRAY_MS+=("" "" "" "" "" "" "" "" "" "" "" "" "")
 # Platform BackEnd - 9 (SUCCESS)
-ARRAY_MS+=("plat-ci-handler" "plat-ms-adcheck" "plat-ms-cm" "plat-ms-sm" "plat-ms-syncm" "plat-ms-trm" "plat-ms-vid4o" "plat-ms-scheduler" "plat-ms-metering")
+ARRAY_MS+=("" "" "" "" "" "" "" "" "")
 # Management - 3 (SUCCESS)
-ARRAY_MS+=("mng-metric-exporter" "mng-ms-batch" "mng-ms-service")
+ARRAY_MS+=("" "" "")
 
 # Virtualization - 1 (FAILED)
 #ARRAY_MS+=("cloudpc-libvirt")

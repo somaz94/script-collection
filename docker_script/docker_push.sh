@@ -6,7 +6,7 @@ set -ex
 NEW_TAG=""
 
 # Write Registry
-LOCAL_REGI=
+LOCAL_REGI=""
 
 cat /dev/null > load-image_list
 
