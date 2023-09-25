@@ -1,4 +1,3 @@
-cat dbbackup.sh
 #!/bin/bash
 
 # Define variables
@@ -11,6 +10,9 @@ BACKUP_PATH=""
 for DB_NAME in "${DBS[@]}"
 do
     BACKUP_FILE_NAME="${DB_NAME}_$(date +%Y%m%d).sql"
+
+    # Create a dump of the backup_path
+    sudo mkdir -p $BACKUP_PATH
 
     # Create a dump of the database
     mysqldump -h $DB_HOST -u $DB_USER -p$DB_PASS $DB_NAME --set-gtid-purged=OFF > $BACKUP_PATH/$BACKUP_FILE_NAME
