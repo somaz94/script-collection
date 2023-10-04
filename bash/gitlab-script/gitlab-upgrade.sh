@@ -1,9 +1,9 @@
 #!/bin/bash
 
-version=16.2.3-ce.0  # write your update version
+version=16.3.4-ce.0  # write your update version
 
 echo "Upgrading to GitLab $version"
-
+sudo apt update
 sudo apt-get install -y gitlab-ce=$version
 sleep 10
 sudo gitlab-ctl reconfigure
