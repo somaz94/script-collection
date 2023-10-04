@@ -4,14 +4,18 @@ This repository contains a collection of scripts to help manage various software
 <br/>
 
 ## 📂 Directories and their Scripts
-- check-script 🖥️
-- db-script 🗃️
-- docker-script 🐳
-- gitlab-script 🦊
-- jenkins-script 🌟
-- k8s-script ☸️
-- openstack-script 🌩️
-- linux-script 🐧🌀🎩
+- bash 📜
+    - check-script 🖥️
+    - db-script 🗃️
+    - docker-script 🐳
+    - gitlab-script 🦊
+    - jenkins-script 🌟
+    - k8s-script ☸️
+    - openstack-script 🌩️
+    - linux-script 🐧🌀🎩
+
+- python 🐍
+    - linux-script 🐧🌀🎩
 
 <br/>
 

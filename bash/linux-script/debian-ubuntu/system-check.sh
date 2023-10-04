@@ -1,6 +1,6 @@
 #!/bin/bash
 
-echo "Debian/Ubuntu Server Inspection Script"
+echo "Ubuntu Server Inspection Script"
 echo "------------------------------"
 
 # 1. Check the OS and version
@@ -33,7 +33,7 @@ df -h | grep -E '(\/$|\/boot$)'
 
 # 6. Check if UFW (Uncomplicated Firewall) is active
 echo "6. Checking for active firewall (UFW)..."
-if sudo ufw status | grep -q "active"; then
+if sudo ufw status | grep -q "^Status: active$"; then
     echo "UFW firewall is active."
 else
     echo "UFW firewall is not active."
@@ -65,4 +65,3 @@ echo "IP Address: $ip_address"
 
 # End of script message
 echo "Inspection complete!"
-
