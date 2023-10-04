@@ -15,6 +15,7 @@ This repository contains a collection of scripts to help manage various software
     - linux-script 🐧🌀🎩
 
 - python 🐍
+    - db-script 🗃️
     - gitlab-script 🦊
     - linux-script 🐧🌀🎩
 
