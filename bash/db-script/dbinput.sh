@@ -1,11 +1,11 @@
 #!/bin/bash
 
 # Define variables
-DB_HOST=""
-DB_USER=""
-DB_PASS=""
-DBS=("" "" "" "" "" "" "") # Update this with your actual database names
-BACKUP_PATH=""
+DB_HOST="your_db_host" 
+DB_USER="your_db_user"
+DB_PASS="your_db_password"
+DBS=("db1" "db2" "db3" "db4") # Update this with your actual database names
+BACKUP_PATH="your_backup_path"
 
 for DB_NAME in "${DBS[@]}"
 do
