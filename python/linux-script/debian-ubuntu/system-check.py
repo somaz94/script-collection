@@ -2,9 +2,42 @@
 
 import os
 import subprocess
+import json
 
 def run_command(cmd):
-    return subprocess.check_output(cmd, shell=True).decode('utf-8').strip()
+    try:
+        return subprocess.check_output(cmd, stderr=subprocess.DEVNULL, shell=True).decode('utf-8').strip()
+    except subprocess.CalledProcessError:
+        return None
+
+def check_kubernetes_status():
+    try:
+        nodes_status = run_command("kubectl get nodes")
+        if "Ready" in nodes_status:
+            print("Kubernetes cluster is operational.")
+            return True
+        else:
+            print("Kubernetes cluster has issues. Not all nodes are in 'Ready' state.")
+            return False
+    except:
+        print("Kubernetes cluster is not operational or kubectl is not properly configured.")
+        return False
+
+def check_pods_status():
+    all_pods_json = run_command('kubectl get pods --all-namespaces -o json')
+    all_pods_data = json.loads(all_pods_json)
+
+    error_pods = []
+
+    for pod in all_pods_data['items']:
+        if pod['status']['phase'] not in ['Running', 'Succeeded']:
+            error_pods.append(f"{pod['metadata']['name']} {pod['status']['phase']}")
+
+    if error_pods:
+        print("Some pods are not in 'Running' or 'Succeeded' state:")
+        print("\n".join(error_pods))
+    else:
+        print("All pods are running smoothly.")
 
 def main():
     print("Debian/Ubuntu Server Inspection Script")
@@ -67,6 +100,15 @@ def main():
     ip_address = run_command("hostname -I | awk '{print $1}'")
     print(f"Hostname: {hostname}")
     print(f"IP Address: {ip_address}")
+
+    # 10. Kubernetes Status Check
+    print("10. Checking Kubernetes Cluster Status...")
+    if check_kubernetes_status():
+        print("11. Checking Kubernetes Pods Status...")
+        check_pods_status()
+    else:
+        print("Skipping pods check as Kubernetes is not operational.")
+
 
     # End of script message
     print("Inspection complete!")

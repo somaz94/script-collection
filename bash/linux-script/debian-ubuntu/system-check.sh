@@ -63,5 +63,27 @@ ip_address=$(hostname -I | awk '{print $1}')
 echo "Hostname: $hostname"
 echo "IP Address: $ip_address"
 
+# 10. Checking Kubernetes Cluster Status
+echo "10. Checking Kubernetes Cluster Status..."
+if command -v kubectl &>/dev/null; then
+    if kubectl cluster-info &>/dev/null; then
+        echo "Kubernetes cluster is operational."
+
+        # 11. Checking Kubernetes Pods Status
+        echo "11. Checking Kubernetes Pods Status..."
+        non_running_pods=$(kubectl get pods --all-namespaces --no-headers 2>/dev/null | awk '$4 != "Running" && $4 != "Completed" {print $2 " " $4}')
+        if [ -z "$non_running_pods" ]; then
+            echo "All pods are in 'Running' or 'Completed' state."
+        else
+            echo "Some pods are not in 'Running' or 'Completed' state:"
+            echo "$non_running_pods"
+        fi
+    else
+        echo "Kubernetes cluster is not operational or kubectl is not properly configured."
+    fi
+else
+    echo "kubectl command not found. Skipping Kubernetes check."
+fi
+
 # End of script message
 echo "Inspection complete!"
