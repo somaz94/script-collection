@@ -13,6 +13,7 @@ This repository contains a collection of scripts to help manage various software
     - k8s-script ☸️
     - openstack-script 🌩️
     - linux-script 🐧🌀🎩
+    - gcs-script ☁️💾
 
 - python 🐍
     - db-script 🗃️
