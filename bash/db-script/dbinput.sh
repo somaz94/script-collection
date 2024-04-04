@@ -17,6 +17,21 @@ do
       exit 1
     fi
 
+    # Check if the database exists
+    DB_EXISTS=$(mysql -h $DB_HOST -u $DB_USER -p$DB_PASS -e "SHOW DATABASES LIKE '$DB_NAME';" | grep "$DB_NAME" > /dev/null; echo "$?")
+    
+    # If the database does not exist, create it
+    if [ $DB_EXISTS -ne 0 ]; then
+        echo "Database $DB_NAME does not exist. Creating..."
+        mysql -h $DB_HOST -u $DB_USER -p$DB_PASS -e "CREATE DATABASE IF NOT EXISTS $DB_NAME;"
+        if [ $? -eq 0 ]; then
+            echo "Database $DB_NAME created successfully."
+        else
+            echo "Failed to create database $DB_NAME."
+            continue # Skip to the next database
+        fi
+    fi
+
     # Restore the database from the backup file
     mysql -h $DB_HOST -u $DB_USER -p$DB_PASS $DB_NAME < $BACKUP_PATH/$BACKUP_FILE_NAME
 
