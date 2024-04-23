@@ -17,34 +17,51 @@ while ! ping -c 1 -W 1 10.77.101.25; do
 done
 
 ## Mount Setting ##
-mkdir -p /home/somaz/application
-sudo mount -t nfs 10.77.101.25:/nfs/application /home/somaz/application
-echo "10.77.101.25:/nfs/application /home/somaz/application nfs defaults 0 0" | sudo tee -a /etc/fstab
+if ! mount | grep -q '/home/somaz/application'; then
+    echo "Mounting NFS share..."
+    mkdir -p /home/somaz/application
+    sudo mount -t nfs 10.77.101.25:/nfs/application /home/somaz/application
+    # Add to fstab if not already present to ensure re-mounting on reboot
+    if ! grep -q '10.77.101.25:/nfs/application /home/somaz/application nfs' /etc/fstab; then
+        echo "10.77.101.25:/nfs/application /home/somaz/application nfs defaults 0 0" | sudo tee -a /etc/fstab
+    fi
+else
+    echo "NFS share is already mounted."
+fi
 
-## Install Nvidia-driver
-sudo apt-get update -y
-sudo apt-get install ubuntu-drivers-common 
-sudo apt-get install nvidia-driver-550 nvidia-cuda-toolkit
+## Install Nvidia-driver, CUDA, and cuDNN if not already installed
+if ! nvidia-smi > /dev/null 2>&1; then
+    echo "Installing NVIDIA driver..."
+    sudo apt-get update -y
+    sudo apt-get install -y ubuntu-drivers-common 
+    sudo apt-get install -y nvidia-driver-550
+fi
 
 ## Install Cuda
-wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-ubuntu2204.pin
-sudo mv cuda-ubuntu2204.pin /etc/apt/preferences.d/cuda-repository-pin-600
-sudo apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/3bf863cc.pub
-sudo add-apt-repository "deb https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/ /" -y
-sudo apt-get update -y
-sudo apt-get install -y cuda-11-8 cuda-toolkit-11-8 
-echo '##cuda##' >> /home/somaz/.bashrc
-echo 'export PATH=/usr/local/cuda/bin:$PATH' >> /home/somaz/.bashrc
+if ! nvcc --version > /dev/null 2>&1; then
+    echo "Installing CUDA..."
+    wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-ubuntu2204.pin
+    sudo mv cuda-ubuntu2204.pin /etc/apt/preferences.d/cuda-repository-pin-600
+    sudo apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/3bf863cc.pub
+    sudo add-apt-repository "deb https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/ /" -y
+    sudo apt-get update -y
+    sudo apt-get install -y cuda-11-8 cuda-toolkit-11-8 
+    echo '##cuda##' >> /home/somaz/.bashrc
+    echo 'export PATH=/usr/local/cuda/bin:$PATH' >> /home/somaz/.bashrc
+fi
 
-## Install Cudnn
-wget https://developer.download.nvidia.com/compute/cudnn/redist/cudnn/linux-x86_64/cudnn-linux-x86_64-8.6.0.163_cuda11-archive.tar.xz
-tar xvf cudnn-linux-x86_64-8.6.0.163_cuda11-archive.tar.xz
-sudo cp -P cudnn-linux-x86_64-8.6.0.163_cuda11-archive/include/cudnn*.h /usr/include/
-sudo cp -P cudnn-linux-x86_64-8.6.0.163_cuda11-archive/lib/libcudnn* /usr/lib/x86_64-linux-gnu/
-sudo chmod a+r /usr/include/cudnn*.h /usr/lib/x86_64-linux-gnu/libcudnn*
-sudo ldconfig
-rm cudnn-linux-x86_64-8.6.0.163_cuda11-archive.tar.xz
-rm -r cudnn-linux-x86_64-8.6.0.163_cuda11-archive
+# Check for cuDNN
+if [ ! -f "/usr/include/cudnn.h" ]; then
+    echo "Installing cuDNN..."
+    wget https://developer.download.nvidia.com/compute/cudnn/redist/cudnn/linux-x86_64/cudnn-linux-x86_64-8.6.0.163_cuda11-archive.tar.xz
+    tar xvf cudnn-linux-x86_64-8.6.0.163_cuda11-archive.tar.xz
+    sudo cp -P cudnn-linux-x86_64-8.6.0.163_cuda11-archive/include/cudnn*.h /usr/include/
+    sudo cp -P cudnn-linux-x86_64-8.6.0.163_cuda11-archive/lib/libcudnn* /usr/lib/x86_64-linux-gnu/
+    sudo chmod a+r /usr/include/cudnn*.h /usr/lib/x86_64-linux-gnu/libcudnn*
+    sudo ldconfig
+    rm cudnn-linux-x86_64-8.6.0.163_cuda11-archive.tar.xz
+    rm -r cudnn-linux-x86_64-8.6.0.163_cuda11-archive
+fi
 
 # Setting Env
 export PATH=/usr/local/cuda/bin:$PATH
