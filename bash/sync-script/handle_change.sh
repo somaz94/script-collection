@@ -4,7 +4,7 @@
 file_path="$1"
 
 # Target directory for synchronization
-sync_target_dir="/data/local-ai/" # Change your Target directory
+sync_target_dir="/data/local-somaz/" # Change your Target directory
 
 # Log file path configuration
 log_file="/root/sync-script/sync.log" 

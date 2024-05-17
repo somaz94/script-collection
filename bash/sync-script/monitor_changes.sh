@@ -1,10 +1,10 @@
 #!/bin/bash
 
 # Set the directory to be monitored
-watch_dir="/root/ai"
+watch_dir="/root/somaz"
 
 # Target directory for synchronization
-sync_target_dir="/data/local-ai/"
+sync_target_dir="/data/local-somaz/"
 
 # Path to the change handling script
 action_script="/root/sync-script/handle_change.sh"
