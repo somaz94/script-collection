@@ -5,7 +5,7 @@ VERSION="0.2"
 AUTHOR="jwizard"
 TODAY_YMD_HIS=`date "+%Y.%m.%d %H:%I:%S"`
 TODAY=`date "+%m%d"`
-NAMESPACE=cloudpc
+NAMESPACE=somaz
 OUTPUT_FILENAME=display_ms_output_$TODAY.txt
 MESSAGE_EMPTY="[[ === NO DATA === ]]"
 MESSAGE_DEPRECATED_15="[[ === DEPRECATED after 1.1.0.15 === ]]"
@@ -26,14 +26,14 @@ ARRAY_MS+=("" "" "" "" "" "" "" "" "")
 ARRAY_MS+=("" "" "")
 
 # Virtualization - 1 (FAILED)
-#ARRAY_MS+=("cloudpc-libvirt")
+#ARRAY_MS+=("somaz-libvirt")
 # Logging - (FAILED)
-#ARRAY_MS+=("cloudpc-logging-kibana" "cloudpc-logging-fluent-bit" "cloudpc-logging-elasticsearch-client" "cloudpc-logging-elasticsearch-curator" "cloudpc-logging-elasticsearch-exporter" "tenant-grafana")
+#ARRAY_MS+=("somaz-logging-kibana" "somaz-logging-fluent-bit" "somaz-logging-elasticsearch-client" "somaz-logging-elasticsearch-curator" "somaz-logging-elasticsearch-exporter" "tenant-grafana")
 
 ##################################
 
-echo "[[ ===== START : $TODAY_YMD_HIS - find cloudpc microservice commit_id, ver:$VERSION created by $AUTHOR ===== ]]"
-echo "[[ ===== START : $TODAY_YMD_HIS - find cloudpc microservice commit_id, ver:$VERSION created by $AUTHOR ===== ]]" >> $OUTPUT_FILENAME
+echo "[[ ===== START : $TODAY_YMD_HIS - find somaz microservice commit_id, ver:$VERSION created by $AUTHOR ===== ]]"
+echo "[[ ===== START : $TODAY_YMD_HIS - find somaz microservice commit_id, ver:$VERSION created by $AUTHOR ===== ]]" >> $OUTPUT_FILENAME
 
 for APP_MS in "${ARRAY_MS[@]}"; do
 	
@@ -65,6 +65,6 @@ for APP_MS in "${ARRAY_MS[@]}"; do
 	fi
 done
 
-echo "[[ ===== END : $TODAY_YMD_HIS - find cloudpc microservice commit_id version:$VERSION by $AUTHOR ===== ]]"
-echo "[[ ===== END : $TODAY_YMD_HIS - find cloudpc microservice commit_id version:$VERSION by $AUTHOR ===== ]]" >> $OUTPUT_FILENAME
+echo "[[ ===== END : $TODAY_YMD_HIS - find somaz microservice commit_id version:$VERSION by $AUTHOR ===== ]]"
+echo "[[ ===== END : $TODAY_YMD_HIS - find somaz microservice commit_id version:$VERSION by $AUTHOR ===== ]]" >> $OUTPUT_FILENAME
 
