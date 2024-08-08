@@ -25,3 +25,4 @@ This repository contains a collection of scripts to help manage various software
 
 ## Note: 📘 
 Detailed descriptions and usage instructions for each script are contained within the individual script files.
+
