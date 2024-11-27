@@ -7,10 +7,13 @@ MOUNT_POINT="/home/somaz/application"
 CUDA_VERSION="cuda-11-8"
 CUDA_TOOLKIT="cuda-toolkit-11-8"
 NVIDIA_DRIVER="nvidia-driver-550"
-CUDNN_URL="https://developer.download.nvidia.com/compute/cudnn/redist/cudnn/linux-x86_64/cudnn-linux-x86_64-8.6.0.163_cuda11-archive.tar.xz"
+CUDNN_VERSION="8.6.0.163"
+CUDNN_CUDA_VERSION="cuda11"
+CUDNN_URL="https://developer.download.nvidia.com/compute/cudnn/redist/cudnn/linux-x86_64/cudnn-linux-x86_64-${CUDNN_VERSION}_${CUDNN_CUDA_VERSION}-archive.tar.xz"
 CUDA_PIN_URL="https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-ubuntu2204.pin"
 CUDA_KEY_URL="https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/3bf863cc.pub"
 CUDA_REPO="deb https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/ /"
+CUDNN_ARCHIVE="cudnn-linux-x86_64-${CUDNN_VERSION}_${CUDNN_CUDA_VERSION}-archive"
 
 ## Install Standard Package ##
 sudo apt-get update -y
@@ -65,13 +68,13 @@ fi
 if [ ! -f "/usr/include/cudnn.h" ]; then
     echo "Installing cuDNN..."
     wget $CUDNN_URL
-    tar xvf cudnn-linux-x86_64-8.6.0.163_cuda11-archive.tar.xz
-    sudo cp -P cudnn-linux-x86_64-8.6.0.163_cuda11-archive/include/cudnn*.h /usr/include/
-    sudo cp -P cudnn-linux-x86_64-8.6.0.163_cuda11-archive/lib/libcudnn* /usr/lib/x86_64-linux-gnu/
+    tar xvf ${CUDNN_ARCHIVE}.tar.xz
+    sudo cp -P ${CUDNN_ARCHIVE}/include/cudnn*.h /usr/include/
+    sudo cp -P ${CUDNN_ARCHIVE}/lib/libcudnn* /usr/lib/x86_64-linux-gnu/
     sudo chmod a+r /usr/include/cudnn*.h /usr/lib/x86_64-linux-gnu/libcudnn*
     sudo ldconfig
-    rm cudnn-linux-x86_64-8.6.0.163_cuda11-archive.tar.xz
-    rm -r cudnn-linux-x86_64-8.6.0.163_cuda11-archive
+    rm ${CUDNN_ARCHIVE}.tar.xz
+    rm -r ${CUDNN_ARCHIVE}
 fi
 
 # Setting Env
