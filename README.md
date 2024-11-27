@@ -14,11 +14,13 @@ This repository contains a collection of scripts to help manage various software
     - openstack-script 🌩️
     - linux-script 🐧🌀🎩
     - gcs-script ☁️💾
+    ...
 
 - python 🐍
     - db-script 🗃️
     - gitlab-script 🦊
     - linux-script 🐧🌀🎩
+    ...
 
 
 <br/>
