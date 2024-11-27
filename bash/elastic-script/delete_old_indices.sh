@@ -6,8 +6,11 @@
 
 # Elasticsearch connection settings
 ELASTIC_USER="elastic"
-ELASTIC_PASSWORD="" # password
-ELASTIC_HOST="" # url
+ELASTIC_PASSWORD=""
+ELASTIC_HOST=""
+
+# Index pattern to match
+INDEX_PATTERN="logstash-"
 
 # Retention period settings
 # Minimum number of days to keep indices
@@ -94,7 +97,7 @@ else
 fi
 
 # Get all indices with error handling
-ALL_INDICES=$(curl -s -k -u "$ELASTIC_USER:$ELASTIC_PASSWORD" "$ELASTIC_HOST/_cat/indices?v" | awk '{print $3}' | grep '^logstash-' || echo "")
+ALL_INDICES=$(curl -s -k -u "$ELASTIC_USER:$ELASTIC_PASSWORD" "$ELASTIC_HOST/_cat/indices?v" | awk '{print $3}' | grep "^${INDEX_PATTERN}" || echo "")
 
 # Check if curl command was successful
 if [ -z "$ALL_INDICES" ]; then
@@ -124,4 +127,3 @@ for INDEX in $ALL_INDICES; do
         echo "Skipping index: $INDEX (newer than or equal to $THRESHOLD_DATE)"
     fi
 done
-

@@ -14,8 +14,9 @@ import (
 
 const (
 	elasticUser          = "elastic"
-	elasticPassword      = "concrit123!"                     // password
-	elasticHost          = "http://elasticsearch.concrit.us" // url
+	elasticPassword      = ""          // password
+	elasticHost          = ""          // url
+	indexPattern         = "logstash-" // index pattern to match
 	minRetentionDays     = 7
 	defaultRetentionDays = 30
 )
@@ -104,7 +105,7 @@ func getIndices() ([]string, error) {
 	var indices []string
 	for _, line := range strings.Split(string(body), "\n") {
 		fields := strings.Fields(line)
-		if len(fields) > 2 && strings.HasPrefix(fields[2], "logstash-") {
+		if len(fields) > 2 && strings.HasPrefix(fields[2], indexPattern) {
 			indices = append(indices, fields[2])
 		}
 	}
@@ -114,7 +115,7 @@ func getIndices() ([]string, error) {
 
 func processIndex(index, thresholdDate string) {
 	// Extract date from index name
-	re := regexp.MustCompile(`logstash-(.+)`)
+	re := regexp.MustCompile(indexPattern + `(.+)`)
 	matches := re.FindStringSubmatch(index)
 	if len(matches) != 2 {
 		fmt.Printf("Warning: Skipping %s - Invalid format\n", index)

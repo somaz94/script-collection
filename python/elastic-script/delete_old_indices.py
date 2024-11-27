@@ -17,6 +17,9 @@ ELASTIC_USER = "elastic"
 ELASTIC_PASSWORD = ""  # password
 ELASTIC_HOST = ""  # url
 
+# Index pattern to match
+INDEX_PATTERN = "logstash-"
+
 # Retention period settings
 MIN_RETENTION_DAYS = 7
 DEFAULT_RETENTION_DAYS = 30
@@ -61,11 +64,11 @@ def get_indices() -> Optional[list]:
         )
         response.raise_for_status()
         
-        # Extract index names starting with 'logstash-'
+        # Extract index names starting with INDEX_PATTERN
         indices = []
         for line in response.text.splitlines()[1:]:  # Skip header line
             index_name = line.split()[2]
-            if index_name.startswith('logstash-'):
+            if index_name.startswith(INDEX_PATTERN):
                 indices.append(index_name)
         
         return indices
@@ -108,7 +111,7 @@ def main():
     # Process indices
     for index in indices:
         # Extract date from index name
-        match = re.search(r'logstash-(.+)', index)
+        match = re.search(f'{INDEX_PATTERN}(.+)', index)
         if not match:
             print(f"Warning: Skipping {index} - Invalid format")
             continue
