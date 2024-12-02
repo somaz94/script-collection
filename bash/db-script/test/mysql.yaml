@@ -1,0 +1,110 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mysql-init-config
+data:
+  init.sql: |
+    CREATE USER IF NOT EXISTS 'somaz'@'%';
+    GRANT ALL PRIVILEGES ON *.* TO 'somaz'@'%';
+    GRANT PROCESS ON *.* TO 'somaz'@'%';
+    FLUSH PRIVILEGES;
+    
+    CREATE DATABASE IF NOT EXISTS db1;
+    CREATE DATABASE IF NOT EXISTS db2;
+    CREATE DATABASE IF NOT EXISTS db3;
+    CREATE DATABASE IF NOT EXISTS db4;
+    
+    GRANT ALL PRIVILEGES ON db1.* TO 'somaz'@'%';
+    GRANT ALL PRIVILEGES ON db2.* TO 'somaz'@'%';
+    GRANT ALL PRIVILEGES ON db3.* TO 'somaz'@'%';
+    GRANT ALL PRIVILEGES ON db4.* TO 'somaz'@'%';
+    FLUSH PRIVILEGES;
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mysql-pvc
+  annotations:
+    nfs.io/storage-path: "test-path"    
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+  storageClassName: nfs-client
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mysql-secret
+type: Opaque
+data:
+  DB_USERNAME: c29tYXo= # echo -n "xesos_db" | base64
+  DB_PASSWORD: c29tYXo= # echo -n "oozoo0627" | base64
+  DB_ROOT_PASSWORD: c29tYXo= # echo -n "oozoo0627" | base64
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mysql
+spec:
+  selector:
+    matchLabels:
+      app: mysql
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: mysql
+    spec:
+      containers:
+      - name: mysql
+        image: mysql:9.0.1
+        env:
+          - name: MYSQL_USER
+            valueFrom:
+              secretKeyRef:
+                name: mysql-secret
+                key: DB_USERNAME
+          - name: MYSQL_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: mysql-secret
+                key: DB_PASSWORD
+          - name: MYSQL_ROOT_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: mysql-secret
+                key: DB_ROOT_PASSWORD
+          # - name: MYSQL_DATABASE
+          #   value: "db1"
+        ports:
+        - containerPort: 3306
+          name: mysql
+        volumeMounts:
+        - name: mysql-persistent-storage
+          mountPath: /var/lib/mysql
+        - name: mysql-init-script
+          mountPath: /docker-entrypoint-initdb.d
+      volumes:
+      - name: mysql-persistent-storage
+        persistentVolumeClaim:
+          claimName: mysql-pvc
+      - name: mysql-init-script
+        configMap:
+          name: mysql-init-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql
+spec:
+  type: NodePort
+  ports:
+  - port: 3306
+    nodePort: 30736
+    protocol: TCP
+  selector:
+    app: mysql
