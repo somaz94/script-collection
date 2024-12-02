@@ -1,5 +1,10 @@
 #!/bin/bash
 
+# Show available namespaces
+echo "Available namespaces:"
+kubectl get namespaces | grep -v NAME | awk '{print "- " $1}'
+echo
+
 NAMESPACE="$1"
 
 if [ -z "$NAMESPACE" ]; then

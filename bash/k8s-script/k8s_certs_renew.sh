@@ -1,7 +1,15 @@
 #!/bin/bash
 
-# Define current date for backup
+# Check if script is run as root
+if [[ $EUID -ne 0 ]]; then
+   echo "This script must be run as root"
+   exit 1
+fi
+
+# Define variables
 current_date=$(date +'%Y-%m-%d')
+k8s_user=${K8S_USER:-somaz}  # Use environment variable with default value
+backup_dir="/root/${current_date}-kubernetes-pki-backup"
 
 # Checking the expiration of certificates
 echo "Checking the expiration of current Kubernetes certificates..."
@@ -9,9 +17,17 @@ kubeadm certs check-expiration
 
 # Backup current certificates before renewal
 echo "Backing up existing certificates..."
-backup_dir="/root/${current_date}-kubernetes-pki-backup"
 mkdir -p "$backup_dir"
-cp -r /etc/kubernetes/pki/* "$backup_dir" || { echo "Backup failed"; exit 1; }
+if ! cp -r /etc/kubernetes/pki/* "$backup_dir"; then
+    echo "Backup failed"
+    exit 1
+fi
+
+# Verify backup
+if ! diff -r /etc/kubernetes/pki "$backup_dir" > /dev/null; then
+    echo "Backup verification failed"
+    exit 1
+fi
 
 # Renew all Kubernetes certificates
 echo "Renewing Kubernetes certificates..."
@@ -27,9 +43,13 @@ sleep 20
 
 # Explicitly reload control plane components if not managed by kubelet as static pods
 echo "Reloading Kubernetes control plane components..."
-kill -s SIGHUP $(pidof kube-apiserver)
-kill -s SIGHUP $(pidof kube-controller-manager)
-kill -s SIGHUP $(pidof kube-scheduler)
+for component in kube-apiserver kube-controller-manager kube-scheduler; do
+    if ! pidof $component > /dev/null; then
+        echo "Warning: $component is not running"
+        continue
+    fi
+    kill -s SIGHUP $(pidof $component)
+done
 
 # Restart container runtime to ensure it's using the latest certificates
 echo "Restarting container runtime..."
@@ -43,10 +63,17 @@ systemctl daemon-reload
 echo "Checking the status of Kubernetes components..."
 kubectl get pods --all-namespaces
 
-# Update admin configuration in .kube/config
+# Update admin configuration
 echo "Updating admin configuration..."
 cp /etc/kubernetes/admin.conf /root/.kube/config
-cp /etc/kubernetes/admin.conf /home/somaz/.kube/config || { echo "Failed to copy admin.conf to user somaz"; exit 1; }
+if [[ -d "/home/${k8s_user}" ]]; then
+    cp /etc/kubernetes/admin.conf "/home/${k8s_user}/.kube/config" || { 
+        echo "Failed to copy admin.conf to user ${k8s_user}"
+        exit 1
+    }
+else
+    echo "Warning: User ${k8s_user} home directory not found"
+fi
 
 # Check nodes and again check certificate expiration to confirm renewal
 echo "Checking status of nodes and rechecking certificate expirations..."
