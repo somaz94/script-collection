@@ -40,9 +40,9 @@ metadata:
   name: mysql-secret
 type: Opaque
 data:
-  DB_USERNAME: c29tYXo= # echo -n "xesos_db" | base64
-  DB_PASSWORD: c29tYXo= # echo -n "oozoo0627" | base64
-  DB_ROOT_PASSWORD: c29tYXo= # echo -n "oozoo0627" | base64
+  DB_USERNAME: c29tYXo= # echo -n "somaz" | base64
+  DB_PASSWORD: c29tYXo= # echo -n "somaz" | base64
+  DB_ROOT_PASSWORD: c29tYXo= # echo -n "somaz" | base64
 ---
 apiVersion: apps/v1
 kind: Deployment
