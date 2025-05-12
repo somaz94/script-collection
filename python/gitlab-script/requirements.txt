@@ -1,0 +1,2 @@
+requests>=2.31.0  # For GitLab API interactions
+typing-extensions>=4.7.1  # For type hints support 
