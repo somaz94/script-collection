@@ -1,16 +1,34 @@
 #!/usr/bin/env python3
 
+# Debian/Ubuntu System Health Check Script
+# ------------------------------------
+# This script performs a comprehensive health check of a Debian/Ubuntu system,
+# including system resources, services, and Kubernetes cluster status.
+
 import os
 import subprocess
 import json
 
 def run_command(cmd):
+    """Execute a shell command and return its output.
+    
+    Args:
+        cmd (str): Command to execute
+        
+    Returns:
+        str: Command output or None if command fails
+    """
     try:
         return subprocess.check_output(cmd, stderr=subprocess.DEVNULL, shell=True).decode('utf-8').strip()
     except subprocess.CalledProcessError:
         return None
 
 def check_kubernetes_status():
+    """Check if Kubernetes cluster is operational.
+    
+    Returns:
+        bool: True if cluster is operational, False otherwise
+    """
     try:
         nodes_status = run_command("kubectl get nodes")
         if "Ready" in nodes_status:
@@ -24,6 +42,7 @@ def check_kubernetes_status():
         return False
 
 def check_pods_status():
+    """Check status of all Kubernetes pods in the cluster."""
     all_pods_json = run_command('kubectl get pods --all-namespaces -o json')
     all_pods_data = json.loads(all_pods_json)
 
@@ -45,30 +64,31 @@ def main():
 
     # 1. Check the OS and version
     print("1. Checking Operating System...")
-    os_description = run_command("lsb_release -d | cut -f2")
-    os_codename = run_command("lsb_release -c | cut -f2")
+    os_description = run_command("lsb_release -d | cut -f2")  # Get OS description
+    os_codename = run_command("lsb_release -c | cut -f2")     # Get OS codename
     print(f"Description: {os_description}")
     print(f"Codename: {os_codename}")
 
     # 2. Check Kernel version
     print("2. Checking Kernel Version...")
-    kernel_version = run_command("uname -r")
+    kernel_version = run_command("uname -r")  # Get kernel release version
     print(f"Kernel Version: {kernel_version}")
 
     # 3. Check CPU cores and architecture
     print("3. Checking CPU Information...")
-    cores = run_command("grep -c ^processor /proc/cpuinfo")
-    architecture = run_command("uname -m")
+    cores = run_command("grep -c ^processor /proc/cpuinfo")  # Count CPU cores
+    architecture = run_command("uname -m")                   # Get system architecture
     print(f"CPU Cores: {cores}")
     print(f"Architecture: {architecture}")
 
     # 4. Check total RAM
     print("4. Checking RAM...")
-    total_ram = run_command("free -m | awk '/^Mem:/{print $2}'")
+    total_ram = run_command("free -m | awk '/^Mem:/{print $2}'")  # Get total RAM in MB
     print(f"Total RAM: {total_ram} MB")
 
     # 5. Check disk space on important partitions
     print("5. Checking Disk Space...")
+    # Check root (/) and boot partitions
     print(run_command("df -h | grep -E '(\\/$|\\/boot$)'"))
 
     # 6. Check if UFW (Uncomplicated Firewall) is active
@@ -96,8 +116,8 @@ def main():
 
     # 9. Check hostname and IP address
     print("9. Checking hostname and IP address...")
-    hostname = run_command("hostname")
-    ip_address = run_command("hostname -I | awk '{print $1}'")
+    hostname = run_command("hostname")                    # Get system hostname
+    ip_address = run_command("hostname -I | awk '{print $1}'")  # Get primary IP address
     print(f"Hostname: {hostname}")
     print(f"IP Address: {ip_address}")
 
@@ -108,7 +128,6 @@ def main():
         check_pods_status()
     else:
         print("Skipping pods check as Kubernetes is not operational.")
-
 
     # End of script message
     print("Inspection complete!")

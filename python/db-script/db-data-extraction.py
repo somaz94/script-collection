@@ -1,20 +1,32 @@
+#!/usr/bin/env python3
+
+# Data Extraction and Text Export Script
+# ------------------------------------
+# This script extracts user and character data from multiple databases
+# and exports the results to a text file with formatted output
+
 import mysql.connector
 
-# Database configuration for the first MySQL connection
+# Database Configuration
+# --------------------
+# Configuration for the primary database (user information)
 db_config_first = {
-    "host": "",
-    "database": "",
-    "user": "",
-    "password": ""
+    "host": "",        # Primary database host
+    "database": "",    # Primary database name
+    "user": "",        # Database username
+    "password": ""     # Database password
 }
 
-# Database configuration for the second MySQL connection (without specifying the database yet)
+# Base configuration for secondary database (game data)
+# Database name will be dynamically set based on game_db_id
 db_config_second_base = {
-    "host": "",
-    "user": "",
-    "password": ""
+    "host": "",        # Secondary database host
+    "user": "",        # Database username
+    "password": ""     # Database password
 }
 
+# List of user addresses to process
+# These are Ethereum wallet addresses to look up
 user_addresses = [
     "0xxxxxx22074FExxxxxxxxxxxxxxxxxxxxxxx12A0A",
     "0x140xxxxxx915xxxxxbEAxxxxxxxxxxxxxxx9b1e2",
@@ -25,61 +37,68 @@ user_addresses = [
 ]
 
 try:
-    # Open a file to write the results
+    # Open output file for writing results
     with open('somaz-decentralization.txt', 'w') as file:
-        # Connect to the first database
+        # Connect to primary database
         conn_first = mysql.connector.connect(**db_config_first)
         cursor_first = conn_first.cursor()
 
-        # Initialize a counter for numbering
+        # Initialize counter for numbered output
         counter = 1
 
+        # Process each user address
         for address in user_addresses:
+            # Query user information from primary database
             query_first = "SELECT id, game_db_id, nick_name FROM user WHERE address = %s"
             cursor_first.execute(query_first, (address,))
             result_first = cursor_first.fetchone()
 
             if result_first:
+                # Extract and write user information
                 user_id, game_db_id, nick_name = result_first
                 output_line = f"{counter}. Address: {address}, ID: {user_id}, Game DB ID: {game_db_id}, Nickname: {nick_name}\n"
                 file.write(output_line)
 
-                # Construct the database name based on game_db_id
+                # Determine game database name based on game_db_id
                 db_name = f"game{'00' if game_db_id == 100 else '01'}"
 
-                # Update the database name in the second db configuration
+                # Update secondary database configuration
                 db_config_second = db_config_second_base.copy()
                 db_config_second["database"] = db_name
 
-                # Connect to the second database
+                # Connect to secondary database
                 conn_second = mysql.connector.connect(**db_config_second)
                 cursor_second = conn_second.cursor()
 
-                # Execute the query on the second database with updated condition
+                # Query character information
                 query_second = "SELECT actor_id, exp, token_id FROM `character` WHERE user_id = %s AND attribution != 1 AND exp != 0 ORDER BY exp DESC;"
                 cursor_second.execute(query_second, (user_id,))
                 result_second = cursor_second.fetchall()
 
+                # Write character details
                 for row in result_second:
                     detail_line = f"   Actor ID: {row[0]}, EXP: {row[1]}, Token ID: {row[2]}\n"
                     file.write(detail_line)
 
+                # Clean up secondary database connection
                 cursor_second.close()
                 conn_second.close()
 
-                # Increment the counter after processing each address
+                # Increment counter after processing each address
                 counter += 1
             else:
+                # Handle case where user is not found
                 not_found_line = f"{counter}. Address: {address} not found.\n"
                 file.write(not_found_line)
-                # Increment the counter even if the address is not found
                 counter += 1
 
+        # Clean up primary database connection
         cursor_first.close()
         conn_first.close()
+
 except mysql.connector.Error as e:
+    # Handle database errors
     with open('somaz-decentralization.txt', 'a') as file:
         file.write(f"Database error: {e}\n")
 
-# Inform the user that the output has been written to the file
 print("\nThe results have been written to 'somaz-decentralization.txt'.")

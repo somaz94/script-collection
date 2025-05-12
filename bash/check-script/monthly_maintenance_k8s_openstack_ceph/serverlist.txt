@@ -1,1 +1,10 @@
+# Server List Configuration
+# ----------------------
+# This file contains the list of servers to be monitored
+# Add one server hostname per line
+# Example format:
+# server1.example.com
+# server2.example.com
+# server3.example.com
+
 # write server name

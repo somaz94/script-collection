@@ -1,21 +1,35 @@
 #!/bin/bash
 
-# Check if script is run as root
+# Root Privilege Check
+# -----------------
+# Verify script is running with root privileges
+# Required for certificate operations and system service management
 if [[ $EUID -ne 0 ]]; then
    echo "This script must be run as root"
    exit 1
 fi
 
-# Define variables
+# Variable Initialization
+# --------------------
+# Set up variables for backup and user management
+# current_date: Used for backup directory naming
+# k8s_user: Kubernetes admin user (defaults to 'somaz' if not set)
+# backup_dir: Directory for certificate backups
 current_date=$(date +'%Y-%m-%d')
 k8s_user=${K8S_USER:-somaz}  # Use environment variable with default value
 backup_dir="/root/${current_date}-kubernetes-pki-backup"
 
-# Checking the expiration of certificates
+# Certificate Expiration Check
+# -------------------------
+# Check current certificate expiration dates
+# Provides overview of certificates that need renewal
 echo "Checking the expiration of current Kubernetes certificates..."
 kubeadm certs check-expiration
 
-# Backup current certificates before renewal
+# Certificate Backup
+# ----------------
+# Create backup of existing certificates before renewal
+# Includes verification of backup integrity
 echo "Backing up existing certificates..."
 mkdir -p "$backup_dir"
 if ! cp -r /etc/kubernetes/pki/* "$backup_dir"; then
@@ -23,25 +37,40 @@ if ! cp -r /etc/kubernetes/pki/* "$backup_dir"; then
     exit 1
 fi
 
-# Verify backup
+# Backup Verification
+# ----------------
+# Verify backup was created successfully
+# Compares original and backup directories
 if ! diff -r /etc/kubernetes/pki "$backup_dir" > /dev/null; then
     echo "Backup verification failed"
     exit 1
 fi
 
+# Certificate Renewal
+# ----------------
 # Renew all Kubernetes certificates
+# Includes error handling for failed renewal
 echo "Renewing Kubernetes certificates..."
 kubeadm certs renew all || { echo "Certificate renewal failed"; exit 1; }
 
+# Kubelet Restart
+# -------------
 # Restart kubelet to apply new certificates
+# Required for new certificates to take effect
 echo "Restarting kubelet to apply new certificates..."
 systemctl restart kubelet || { echo "Failed to restart kubelet"; exit 1; }
 
-# Wait for kubelet and control plane components to restart
+# Component Reload Wait
+# ------------------
+# Wait for components to restart and reload configurations
+# Ensures system stability during renewal process
 echo "Waiting for kubelet and control plane components to reload configurations..."
 sleep 20
 
-# Explicitly reload control plane components if not managed by kubelet as static pods
+# Control Plane Component Reload
+# ---------------------------
+# Reload control plane components if not managed by kubelet
+# Sends SIGHUP signal to reload configurations
 echo "Reloading Kubernetes control plane components..."
 for component in kube-apiserver kube-controller-manager kube-scheduler; do
     if ! pidof $component > /dev/null; then
@@ -51,19 +80,31 @@ for component in kube-apiserver kube-controller-manager kube-scheduler; do
     kill -s SIGHUP $(pidof $component)
 done
 
-# Restart container runtime to ensure it's using the latest certificates
+# Container Runtime Restart
+# ----------------------
+# Restart container runtime to ensure latest certificate usage
+# Required for proper certificate propagation
 echo "Restarting container runtime..."
 systemctl restart containerd || { echo "Failed to restart container runtime"; exit 1; }
 
-# Ensure system manager is aware of any changes in the system services
+# System Daemon Reload
+# -----------------
+# Reload system daemon configurations
+# Ensures system is aware of all service changes
 echo "Reloading system daemon configurations..."
 systemctl daemon-reload
 
-# Confirm running status of all components
+# Component Status Check
+# -------------------
+# Verify all Kubernetes components are running
+# Provides overview of system health after renewal
 echo "Checking the status of Kubernetes components..."
 kubectl get pods --all-namespaces
 
-# Update admin configuration
+# Admin Configuration Update
+# ----------------------
+# Update admin configuration with new certificates
+# Copies updated config to appropriate locations
 echo "Updating admin configuration..."
 cp /etc/kubernetes/admin.conf /root/.kube/config
 if [[ -d "/home/${k8s_user}" ]]; then
@@ -75,7 +116,10 @@ else
     echo "Warning: User ${k8s_user} home directory not found"
 fi
 
-# Check nodes and again check certificate expiration to confirm renewal
+# Final Verification
+# ----------------
+# Verify node status and certificate expiration
+# Confirms successful renewal process
 echo "Checking status of nodes and rechecking certificate expirations..."
 kubectl get nodes
 kubeadm certs check-expiration

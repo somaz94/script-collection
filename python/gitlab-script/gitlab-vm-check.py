@@ -1,16 +1,34 @@
 #!/usr/bin/env python3
 
+# GitLab VM Health Check Script
+# --------------------------
+# This script performs a comprehensive health check of a GitLab VM,
+# including system resources, services, and Kubernetes cluster status
+
 import os
 import subprocess
 import json
 
 def run_command(cmd):
+    """Execute a shell command and return its output.
+    
+    Args:
+        cmd (str): Command to execute
+        
+    Returns:
+        str: Command output or None if command fails
+    """
     try:
         return subprocess.check_output(cmd, stderr=subprocess.DEVNULL, shell=True).decode('utf-8').strip()
     except subprocess.CalledProcessError:
         return None
 
 def check_kubernetes_status():
+    """Check if Kubernetes cluster is operational.
+    
+    Returns:
+        bool: True if cluster is operational, False otherwise
+    """
     try:
         nodes_status = run_command("kubectl get nodes")
         if "Ready" in nodes_status:
@@ -24,6 +42,7 @@ def check_kubernetes_status():
         return False
 
 def check_pods_status():
+    """Check status of all Kubernetes pods in the cluster."""
     all_pods_json = run_command('kubectl get pods --all-namespaces -o json')
     all_pods_data = json.loads(all_pods_json)
 
@@ -69,8 +88,7 @@ def main():
 
     # 5. Check disk space on important partitions
     print("5. Checking Disk Space...")
-#    print(run_command("df -h | grep -E '(\\/$|\\/boot$)'"))
-    # Including all necessary mounts in the df command filter
+    # Check disk space on critical GitLab directories and system partitions
     df_output = run_command("df -h | grep -E '(\\/var\\/opt\\/gitlab\\/backups|\\/var\\/opt\\/gitlab\\/git-data|\\/var\\/opt\\/gitlab\\/gitlab-rails\\/shared\\/lfs-objects|\\/$|\\/boot$)'")
     print(df_output)
 
@@ -111,7 +129,6 @@ def main():
         check_pods_status()
     else:
         print("Skipping pods check as Kubernetes is not operational.")
-
 
     # End of script message
     print("Inspection complete!")

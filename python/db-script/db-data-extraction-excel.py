@@ -1,21 +1,33 @@
+#!/usr/bin/env python3
+
+# Data Extraction and Excel Export Script
+# -------------------------------------
+# This script extracts user and character data from multiple databases
+# and exports the results to an Excel file
+
 import mysql.connector
 import pandas as pd
 
-# Database configuration for the first MySQL connection
+# Database Configuration
+# --------------------
+# Configuration for the primary database (user information)
 db_config_first = {
-    "host": "",
-    "database": "",
-    "user": "",
-    "password": ""
+    "host": "",        # Primary database host
+    "database": "",    # Primary database name
+    "user": "",        # Database username
+    "password": ""     # Database password
 }
 
-# Database configuration for the second MySQL connection (without specifying the database yet)
+# Base configuration for secondary database (game data)
+# Database name will be dynamically set based on game_db_id
 db_config_second_base = {
-    "host": "",
-    "user": "",
-    "password": ""
+    "host": "",        # Secondary database host
+    "user": "",        # Database username
+    "password": ""     # Database password
 }
 
+# List of user addresses to process
+# These are Ethereum wallet addresses to look up
 user_addresses = [
     "0xxxxxx22074FExxxxxxxxxxxxxxxxxxxxxxx12A0A",
     "0x140xxxxxx915xxxxxbEAxxxxxxxxxxxxxxx9b1e2",
@@ -25,56 +37,60 @@ user_addresses = [
     # ..more
 ]
 
-# Initialize an empty list to store the data
+# Initialize data storage
 data = []
 
 try:
-    # Connect to the first database
+    # Connect to primary database
     conn_first = mysql.connector.connect(**db_config_first)
     cursor_first = conn_first.cursor()
 
+    # Process each user address
     for address in user_addresses:
+        # Query user information from primary database
         query_first = "SELECT id, game_db_id, nick_name FROM user WHERE address = %s"
         cursor_first.execute(query_first, (address,))
         result_first = cursor_first.fetchone()
 
         if result_first:
+            # Extract user information
             user_id, game_db_id, nick_name = result_first
 
-            # Construct the database name based on game_db_id
+            # Determine game database name based on game_db_id
             db_name = f"game{'00' if game_db_id == 100 else '01'}"
 
-            # Update the database name in the second db configuration
+            # Update secondary database configuration
             db_config_second = db_config_second_base.copy()
             db_config_second["database"] = db_name
 
-            # Connect to the second database
+            # Connect to secondary database
             conn_second = mysql.connector.connect(**db_config_second)
             cursor_second = conn_second.cursor()
 
-            # Execute the query on the second database with updated condition
+            # Query character information
             query_second = "SELECT actor_id, exp, token_id FROM `character` WHERE user_id = %s AND attribution != 1 AND exp != 0 ORDER BY exp DESC;"
             cursor_second.execute(query_second, (user_id,))
             result_second = cursor_second.fetchall()
 
+            # Process character data
             for row in result_second:
-                # Append each row to the data list
+                # Combine user and character data
                 data.append([address, user_id, game_db_id, nick_name, row[0], row[1], row[2]])
 
+            # Clean up secondary database connection
             cursor_second.close()
             conn_second.close()
 
         else:
-            # Append a not found row to the data list
+            # Handle case where user is not found
             data.append([address, None, None, None, None, None, None])
 
+    # Clean up primary database connection
     cursor_first.close()
     conn_first.close()
 
-    # Convert the list to a DataFrame
+    # Create DataFrame and export to Excel
     df = pd.DataFrame(data, columns=['Address', 'User ID', 'Game DB ID', 'Nickname', 'Actor ID', 'EXP', 'Token ID'])
-
-    # Write the DataFrame to an Excel file
     df.to_excel('somaz-decentralization.xlsx', index=False)
 
 except mysql.connector.Error as e:
