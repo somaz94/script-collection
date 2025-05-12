@@ -73,6 +73,12 @@ This repository contains a comprehensive collection of scripts for managing vari
 
 <br/>
 
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+<br/>
+
 ## 📝 Contributing
 Please ensure to:
 1. Add appropriate comments and documentation
