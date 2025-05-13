@@ -73,22 +73,6 @@ This script helps manage Docker images in Harbor repositories by automatically d
 
 <br/>
 
-## Configuration
-
-The script uses the following default configuration, which can be overridden with command-line options:
-
-```
-Harbor URL: harbor.concrit.us
-Protocol: http
-User: admin
-Project: projectm
-Default repository: game/cache
-Images to keep: 100
-Batch size: 10
-```
-
-<br/>
-
 ## How It Works
 
 1. The script authenticates with the Harbor API
