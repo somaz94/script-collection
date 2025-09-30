@@ -4,153 +4,282 @@
 # Global Variables #
 ###################
 
-# Elasticsearch Configuration
-# ------------------------
-# Authentication and connection settings for Elasticsearch
-# Update these values with your Elasticsearch credentials
+# Elasticsearch connection settings
 ELASTIC_USER="elastic"
 ELASTIC_PASSWORD=""
 ELASTIC_HOST=""
 
-# Index Configuration
-# ----------------
-# Pattern to match indices for deletion
-# Default matches all logstash indices
-INDEX_PATTERN="logstash-"
+# Index names to clean (array)
+INDEX_NAMES=()
 
-# Retention Policy
-# -------------
-# Define retention periods for indices
-# MIN_RETENTION_DAYS: Safety threshold to prevent accidental deletion
-# RETENTION_DAYS: Default period to keep indices
+# Default indices to clean if none specified
+# Example: DEFAULT_INDICES=("logstash-*" "filebeat-*" "metricbeat-*")
+# Leave empty to require explicit index specification
+DEFAULT_INDICES=()
+
+# Retention period settings
+# Minimum number of days to keep data
 MIN_RETENTION_DAYS=7
-RETENTION_DAYS=30
+# Default retention period in days
+RETENTION_DAYS=90
 
-# Date Format
-# ---------
-# Current date in Elasticsearch index format (YYYY.MM.DD)
+# Force merge flag
+FORCE_MERGE=false
+
+# Delete index flag
+DELETE_INDEX=false
+
+# Date format
 TODAY=$(date +%Y.%m.%d)
 
-# Help Documentation
-# --------------
-# Display usage information and examples
+# Function to display help message
 show_help() {
     cat << EOF
-Usage: $(basename $0) [OPTIONS]
+Usage: $(basename $0) [OPTIONS] [INDEX_NAMES...]
 
-Delete Elasticsearch indices older than specified retention period.
+Delete old documents from specified Elasticsearch indices based on retention period.
 
 Options:
-    -h, --help      Show this help message
-    -d, --days DAYS Number of days to retain indices (default: 30, minimum: ${MIN_RETENTION_DAYS})
+  -h, --help              Show this help message
+  -d, --days DAYS         Number of days to retain data (default: ${RETENTION_DAYS}, minimum: ${MIN_RETENTION_DAYS})
+  -i, --indices INDICES   Comma-separated list of index names to clean
+  -l, --list              List all available indices
+  -s, --status            Show current status of all indices
+  -f, --force-merge       Force merge indices after deletion to optimize disk space
+  --delete-index          Delete entire index (WARNING: irreversible!)
 
 Examples:
-    $(basename $0)         # Delete indices older than 30 days
-    $(basename $0) -d 60   # Delete indices older than 60 days
-    $(basename $0) --days 60   # Same as above
+  $(basename $0) index1 index2                       # Clean specified indices (${RETENTION_DAYS} days retention)
+  $(basename $0) -d 60 index1 index2                 # Clean specified indices (60 days retention)
+  $(basename $0) -i "index1,index2" -d 60            # Clean indices using comma-separated list
+  $(basename $0) -l                                  # List all available indices
+  $(basename $0) -s                                  # Show current status of all indices
+  $(basename $0) -f index1                           # Clean and force merge index1
+  $(basename $0) -d 60 -f index1 index2              # Clean with 60 days retention and force merge
+  $(basename $0) --delete-index index1               # Delete entire index1
+  $(basename $0) --delete-index -i "index1,index2"   # Delete multiple indices
 
-Note: Minimum retention period is ${MIN_RETENTION_DAYS} days for safety.
+Note: 
+- You must specify at least one index to clean
+- Minimum retention period is ${MIN_RETENTION_DAYS} days for safety
+- Use -l option to list all available indices first
+- --delete-index option completely removes the index and is irreversible!
 EOF
     exit 0
 }
 
-# Command Line Argument Processing
-# ----------------------------
-# Parse long format arguments (--help, --days)
-for arg in "$@"; do
-    case $arg in
-        --help)
+# Parse command line arguments
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -h|--help)
             show_help
             ;;
-        --days=*)
-            RETENTION_DAYS="${arg#*=}"
-            shift
-            ;;
-        --days)
+        -d|--days)
             RETENTION_DAYS="$2"
             shift 2
             ;;
-    esac
-done
-
-# Parse short format arguments (-h, -d)
-OPTIND=1
-while getopts "hd:" opt; do
-    case $opt in
-        h) show_help
-        ;;
-        d) RETENTION_DAYS="$OPTARG"
-        ;;
-        \?) echo "Invalid option -$OPTARG" >&2
+        -i|--indices)
+            IFS=',' read -ra INDEX_NAMES <<< "$2"
+            shift 2
+            ;;
+        -l|--list)
+            echo "Available indices:"
+            curl -s -k -u "$ELASTIC_USER:$ELASTIC_PASSWORD" "$ELASTIC_HOST/_cat/indices?v" | awk 'NR>1 {print $3}' | sort
+            exit 0
+            ;;
+        -s|--status)
+            echo "Current status of all indices:"
+            curl -s -k -u "$ELASTIC_USER:$ELASTIC_PASSWORD" "$ELASTIC_HOST/_cat/indices"
+            exit 0
+            ;;
+        -f|--force-merge)
+            FORCE_MERGE=true
+            shift
+            ;;
+        --delete-index)
+            DELETE_INDEX=true
+            shift
+            ;;
+        -*)
+            echo "Unknown option $1" >&2
             echo "Try '$(basename $0) --help' for more information." >&2
             exit 1
-        ;;
+            ;;
+        *)
+            INDEX_NAMES+=("$1")
+            shift
+            ;;
     esac
 done
 
-# Input Validation
-# -------------
-# Ensure RETENTION_DAYS is a valid positive number
+# Index deletion mode
+if [ "$DELETE_INDEX" = true ]; then
+    # Check if indices are specified
+    if [ ${#INDEX_NAMES[@]} -eq 0 ] || [ -z "${INDEX_NAMES[0]}" ]; then
+        echo "Error: No indices specified for deletion." >&2
+        echo "Try '$(basename $0) --help' for more information." >&2
+        exit 1
+    fi
+    
+    # Display indices to be deleted
+    echo "=========================================="
+    echo "⚠️  INDEX DELETION OPERATION"
+    echo "=========================================="
+    echo "The following indices will be completely deleted:"
+    echo ""
+    for INDEX in "${INDEX_NAMES[@]}"; do
+        echo "  • $INDEX"
+    done
+    echo ""
+    echo "Total: ${#INDEX_NAMES[@]} index(es) will be deleted."
+    echo "=========================================="
+    echo ""
+    echo "⚠️  WARNING: This operation is irreversible!"
+    read -p "Are you sure you want to delete these indices? (Type 'DELETE' to confirm): " -r
+    echo
+    if [ "$REPLY" != "DELETE" ]; then
+        echo "Operation cancelled."
+        exit 0
+    fi
+    
+    echo ""
+    echo "Starting index deletion..."
+    echo ""
+    
+    # Deletion counters
+    SUCCESS_COUNT=0
+    FAIL_COUNT=0
+    
+    # Loop through and delete specified indices
+    for INDEX in "${INDEX_NAMES[@]}"; do
+        echo "Deleting index: $INDEX"
+        
+        RESPONSE=$(curl -s -k -u "$ELASTIC_USER:$ELASTIC_PASSWORD" \
+            -X DELETE "$ELASTIC_HOST/$INDEX" \
+            -H "Content-Type: application/json")
+        
+        # Check if deletion was successful
+        if echo "$RESPONSE" | grep -q '"acknowledged":true'; then
+            echo "✓ Successfully deleted index: $INDEX"
+            ((SUCCESS_COUNT++))
+        else
+            echo "✗ Failed to delete index: $INDEX"
+            echo "Response: $RESPONSE"
+            ((FAIL_COUNT++))
+        fi
+        echo "---"
+    done
+    
+    echo ""
+    echo "=========================================="
+    echo "Index Deletion Complete"
+    echo "=========================================="
+    echo "Success: ${SUCCESS_COUNT}"
+    echo "Failed: ${FAIL_COUNT}"
+    echo "Total: ${#INDEX_NAMES[@]}"
+    echo "=========================================="
+    
+    exit 0
+fi
+
+# Document deletion mode (original functionality)
+
+# Validate RETENTION_DAYS
 if ! [[ "$RETENTION_DAYS" =~ ^[0-9]+$ ]]; then
     echo "Error: Days must be a positive number" >&2
     echo "Try '$(basename $0) --help' for more information." >&2
     exit 1
 fi
 
-# Ensure RETENTION_DAYS meets minimum requirement
 if [ "$RETENTION_DAYS" -lt "$MIN_RETENTION_DAYS" ]; then
     echo "Error: Retention period cannot be less than ${MIN_RETENTION_DAYS} days" >&2
     echo "Try '$(basename $0) --help' for more information." >&2
     exit 1
 fi
 
-# Date Calculation
-# -------------
-# Calculate threshold date based on OS type
-# Different date commands for macOS and Linux
-if [[ "$OSTYPE" == "darwin"* ]]; then
-    # macOS date command
-    THRESHOLD_DATE=$(date -v-${RETENTION_DAYS}d +%Y.%m.%d)
-else
-    # Linux date command
-    THRESHOLD_DATE=$(date -d "-${RETENTION_DAYS} days" +%Y.%m.%d)
+# If no indices specified, use default indices
+if [ ${#INDEX_NAMES[@]} -eq 0 ]; then
+    INDEX_NAMES=("${DEFAULT_INDICES[@]}")
 fi
 
-# Index Retrieval
-# -------------
-# Get list of all matching indices from Elasticsearch
-# Includes error handling for failed curl command
-ALL_INDICES=$(curl -s -k -u "$ELASTIC_USER:$ELASTIC_PASSWORD" "$ELASTIC_HOST/_cat/indices?v" | awk '{print $3}' | grep "^${INDEX_PATTERN}" || echo "")
-
-# Validate Index List
-# ----------------
-# Check if indices were successfully retrieved
-if [ -z "$ALL_INDICES" ]; then
-    echo "Error: Failed to retrieve indices or no indices found"
+# Check if indices are actually specified (not empty)
+if [ ${#INDEX_NAMES[@]} -eq 0 ] || [ -z "${INDEX_NAMES[0]}" ]; then
+    echo "Error: No indices specified for cleanup." >&2
+    echo "Please specify indices using one of the following methods:" >&2
+    echo "  1. As arguments: $(basename $0) index1 index2" >&2
+    echo "  2. Using -i option: $(basename $0) -i \"index1,index2\"" >&2
+    echo "  3. Set DEFAULT_INDICES in the script" >&2
+    echo "" >&2
+    echo "Use '$(basename $0) -l' to list all available indices." >&2
+    echo "Use '$(basename $0) --help' for more information." >&2
     exit 1
 fi
 
-# Index Deletion Process
-# -------------------
-# Process each index and delete if older than threshold
-for INDEX in $ALL_INDICES; do
-    # Extract date from index name
-    INDEX_DATE=$(echo "$INDEX" | sed -E 's/logstash-(.+)/\1/')
+# Check OS type and use appropriate date command
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    # macOS
+    THRESHOLD_DATE=$(date -v-${RETENTION_DAYS}d -u +"%Y-%m-%dT%H:%M:%S.000Z")
+else
+    # Linux
+    THRESHOLD_DATE=$(date -d "-${RETENTION_DAYS} days" -u +"%Y-%m-%dT%H:%M:%S.000Z")
+fi
+
+# Loop through specified indices and delete old documents
+echo "Indices to clean: ${INDEX_NAMES[@]}"
+echo "Retention period: ${RETENTION_DAYS} days"
+echo "Will delete documents older than: $THRESHOLD_DATE"
+read -p "Are you sure you want to delete old documents from these indices? (y/N): " -n 1 -r
+echo
+if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+    echo "Operation cancelled."
+    exit 0
+fi
+
+for INDEX in "${INDEX_NAMES[@]}"; do
+    echo "Processing index: $INDEX"
     
-    # Validate index date format
-    if [[ ! "$INDEX_DATE" =~ ^[0-9]{4}\.[0-9]{2}\.[0-9]{2}$ ]]; then
-        echo "Warning: Skipping $INDEX - Invalid date format"
-        continue
+    # Delete documents older than threshold date
+    DELETE_QUERY='{
+        "query": {
+            "range": {
+                "@timestamp": {
+                    "lt": "'$THRESHOLD_DATE'"
+                }
+            }
+        }
+    }'
+    
+    echo "Deleting old documents from $INDEX..."
+    RESPONSE=$(curl -s -k -u "$ELASTIC_USER:$ELASTIC_PASSWORD" \
+        -X POST "$ELASTIC_HOST/$INDEX/_delete_by_query" \
+        -H "Content-Type: application/json" \
+        -d "$DELETE_QUERY")
+    
+    # Check if deletion was successful and extract deleted count
+    if echo "$RESPONSE" | grep -q '"deleted"'; then
+        DELETED_COUNT=$(echo "$RESPONSE" | grep -o '"deleted":[0-9]*' | cut -d':' -f2)
+        echo "✓ Successfully deleted $DELETED_COUNT documents from index: $INDEX"
+    else
+        echo "✗ Failed to delete documents from index: $INDEX"
+        echo "Response: $RESPONSE"
     fi
 
-    # Compare dates and delete if older than threshold
-    if [[ "$INDEX_DATE" < "$THRESHOLD_DATE" ]]; then
-        echo "Deleting index: $INDEX (older than $THRESHOLD_DATE)"
-        RESPONSE=$(curl -s -k -u "$ELASTIC_USER:$ELASTIC_PASSWORD" -X DELETE "$ELASTIC_HOST/$INDEX")
-        if [[ $? -ne 0 ]]; then
-            echo "Error deleting index $INDEX: $RESPONSE"
+    # Force merge if requested
+    if [ "$FORCE_MERGE" = true ]; then
+        echo "Force merging index: $INDEX..."
+        MERGE_RESPONSE=$(curl -s -k -u "$ELASTIC_USER:$ELASTIC_PASSWORD" \
+            -X POST "$ELASTIC_HOST/$INDEX/_forcemerge?only_expunge_deletes=true" \
+            -H "Content-Type: application/json")
+        
+        # Check if force merge was successful
+        if echo "$MERGE_RESPONSE" | grep -q '"successful"'; then
+            echo "✓ Successfully force merged index: $INDEX"
+        else
+            echo "✗ Failed to force merge index: $INDEX"
+            echo "Response: $MERGE_RESPONSE"
         fi
-    else
-        echo "Skipping index: $INDEX (newer than or equal to $THRESHOLD_DATE)"
     fi
+    echo "---"
 done
+
+echo "Document cleanup process completed."
