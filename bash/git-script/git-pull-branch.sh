@@ -84,10 +84,12 @@ ERROR_COUNT=0
 CONFLICT_COUNT=0
 SKIPPED_COUNT=0
 BRANCH_NOT_FOUND_COUNT=0
+DIRTY_COUNT=0
 
 # Record repositories with issues
 CONFLICT_REPOS=()
 BRANCH_NOT_FOUND_REPOS=()
+DIRTY_REPOS=()
 
 # Function: Get user input
 ask_user() {
@@ -190,7 +192,7 @@ check_git_status() {
             esac
         else
             echo "   Run 'git status' in this directory to see uncommitted changes"
-            return 1
+            return 3  # Special code for dirty working directory
         fi
     fi
     
@@ -347,8 +349,13 @@ process_repository() {
             # User chose to skip
             SKIPPED_COUNT=$((SKIPPED_COUNT + 1))
             repo_success=false
+        elif [ $status_result -eq 3 ]; then
+            # Working directory is dirty (uncommitted changes)
+            DIRTY_REPOS+=("$repo_name ($branch)")
+            DIRTY_COUNT=$((DIRTY_COUNT + 1))
+            # Don't count as failure, just skip this branch
         else
-            # Status check failed
+            # Status check failed (detached HEAD or other error)
             ERROR_COUNT=$((ERROR_COUNT + 1))
             repo_success=false
         fi
@@ -394,6 +401,7 @@ echo -e "${RED}❌ Failed: $ERROR_COUNT repositories${NC}"
 echo -e "${PURPLE}⚔️  Conflicts: $CONFLICT_COUNT repositories${NC}"
 echo -e "${YELLOW}⏭️  Skipped: $SKIPPED_COUNT repositories${NC}"
 echo -e "${CYAN}🌿 Branch not found: $BRANCH_NOT_FOUND_COUNT cases${NC}"
+echo -e "${YELLOW}⚠️  Uncommitted changes: $DIRTY_COUNT cases${NC}"
 
 # Display list of repositories with conflicts
 if [ ${#CONFLICT_REPOS[@]} -gt 0 ]; then
@@ -414,6 +422,16 @@ if [ ${#BRANCH_NOT_FOUND_REPOS[@]} -gt 0 ]; then
     for repo in "${BRANCH_NOT_FOUND_REPOS[@]}"; do
         echo -e "${CYAN}   • $repo${NC}"
     done
+fi
+
+# Display list of repositories with uncommitted changes
+if [ ${#DIRTY_REPOS[@]} -gt 0 ]; then
+    echo ""
+    echo -e "${YELLOW}⚠️  Repositories with uncommitted changes:${NC}"
+    for repo in "${DIRTY_REPOS[@]}"; do
+        echo -e "${YELLOW}   • $repo${NC}"
+    done
+    echo -e "   ${BLUE}💡 Use --stash option to automatically stash changes before pull${NC}"
 fi
 
 if [ ${#CONFLICT_REPOS[@]} -gt 0 ]; then
