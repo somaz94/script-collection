@@ -1,6 +1,6 @@
 # GitHub Secrets Bulk Updater
 
-A Python script to bulk add/update `GITLAB_TOKEN` secrets across all GitHub repositories.
+A Python script to bulk add/update secrets across all GitHub repositories.
 
 <br/>
 
@@ -33,11 +33,15 @@ A Python script to bulk add/update `GITLAB_TOKEN` secrets across all GitHub repo
 
 <br/>
 
-### 2. Prepare GitLab Token
+### 2. Prepare Secret Value
 
-Prepare your newly created GitLab Token.
+Prepare the secret value you want to set across repositories.
 ```
-Example: glpat-xxxxxxxxxxxxxxxxxxxx
+Example: 
+- GitLab Token: glpat-xxxxxxxxxxxxxxxxxxxx
+- AWS Access Key: AKIA...
+- NPM Token: npm_...
+- Any other secret value
 ```
 
 <br/>
@@ -86,17 +90,17 @@ pip install PyNaCl requests
 
 ### 4. Configure Script
 
-Open the `update_secrets.py` file and modify the following variables:
+Open the `git-token-change.py` (or `git-token-change-kr.py` for Korean) file and modify the following variables:
 ```python
 # ==================== Configuration ====================
 GITHUB_TOKEN = ''  # Leave empty and use environment variable (recommended)
 GITHUB_ORG = 'somaz94'  # Your GitHub username or organization name
-NEW_GITLAB_TOKEN = ''  # New GitLab Token
-SECRET_NAME = 'GITLAB_TOKEN'
+SECRET_NAME = 'GITLAB_TOKEN'  # Secret name to update
+SECRET_VALUE = ''  # Secret value (environment variable recommended)
 
 # Dry-run mode (If True, no actual updates)
 DRY_RUN = True  # Test with True first!
-# ======================================================
+# =======================================================
 ```
 
 <br/>
@@ -106,8 +110,13 @@ DRY_RUN = True  # Test with True first!
 # Set GitHub Token as environment variable
 export GITHUB_TOKEN='ghp_your_github_token_here'
 
-# GitLab Token can also be set as environment variable (optional)
-export GITLAB_TOKEN='glpat_your_gitlab_token_here'
+# Set Secret Value as environment variable (recommended)
+export SECRET_VALUE='your_secret_value_here'
+
+# Examples for different secret types:
+# export SECRET_VALUE='glpat-xxxxxxxxxxxxxxxxxxxx'  # GitLab Token
+# export SECRET_VALUE='AKIA...'                      # AWS Access Key
+# export SECRET_VALUE='npm_...'                       # NPM Token
 ```
 
 <br/>
@@ -115,7 +124,10 @@ export GITLAB_TOKEN='glpat_your_gitlab_token_here'
 ### 6. Dry-run Test
 ```bash
 # Run with DRY_RUN = True
-python3 update_secrets.py
+python3 git-token-change.py
+
+# Or Korean version
+python3 git-token-change-kr.py
 ```
 
 Example output:
@@ -147,12 +159,15 @@ If there are no issues, change to `DRY_RUN = False` and run:
 DRY_RUN = False  # Actual update mode
 ```
 ```bash
-python3 update_secrets.py
+python3 git-token-change.py
+
+# Or Korean version
+python3 git-token-change-kr.py
 ```
 
 When confirmation message appears, type `yes`:
 ```
-Do you really want to update GITLAB_TOKEN in all repositories?
+Do you really want to update <SECRET_NAME> in all repositories?
 Type 'yes' to continue: yes
 ```
 
@@ -264,9 +279,10 @@ pip install PyNaCl
 ⚠️ **Critical Information:**
 
 1. **Run Dry-run First**: Always test with `DRY_RUN = True` before actual update
-2. **Token Security**: Use environment variables instead of hardcoding GitHub and GitLab tokens
+2. **Token Security**: Use environment variables instead of hardcoding tokens and secrets
 3. **Backup**: Backup secrets from important repositories beforehand
 4. **Verify Permissions**: Confirm appropriate permissions for Organizations
+5. **Universal Usage**: This script works with any secret type, not just GitLab tokens
 
 <br/>
 
@@ -275,7 +291,7 @@ pip install PyNaCl
 Create `.env` file:
 ```bash
 GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxx
-GITLAB_TOKEN=glpat_xxxxxxxxxxxxxxxxxxxx
+SECRET_VALUE=your_secret_value_here
 ```
 
 Use in script:
@@ -286,7 +302,27 @@ from dotenv import load_dotenv
 load_dotenv()
 
 GITHUB_TOKEN = os.getenv('GITHUB_TOKEN')
-NEW_GITLAB_TOKEN = os.getenv('GITLAB_TOKEN')
+SECRET_VALUE = os.getenv('SECRET_VALUE')
+```
+
+### Multiple Secret Types Examples
+
+```bash
+# For GitLab Token
+export SECRET_NAME='GITLAB_TOKEN'
+export SECRET_VALUE='glpat-xxxxxxxxxxxxxxxxxxxx'
+
+# For AWS Access Key
+export SECRET_NAME='AWS_ACCESS_KEY_ID'
+export SECRET_VALUE='AKIA...'
+
+# For NPM Token
+export SECRET_NAME='NPM_TOKEN'
+export SECRET_VALUE='npm_...'
+
+# For Docker Hub Token
+export SECRET_NAME='DOCKERHUB_TOKEN'
+export SECRET_VALUE='dckr_pat_...'
 ```
 
 <br/>
