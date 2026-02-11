@@ -47,6 +47,8 @@ show_help() {
   -l, --list              사용 가능한 모든 인덱스를 나열합니다
   -s, --status            모든 인덱스의 상태를 출력합니다
   -f, --force-merge       삭제 후 디스크 최적화를 위한 강제 병합 실행
+  -c, --check-settings    인덱스 설정 확인 (total_fields.limit 등)
+  -u, --update-limit NUM  인덱스의 total_fields.limit 값 변경
   --delete-index          인덱스 자체를 완전히 삭제합니다 (경고: 복구 불가능!)
 
 예시:
@@ -57,6 +59,10 @@ show_help() {
   $(basename "$0") -s                             # 인덱스 상태 확인
   $(basename "$0") -f index1                      # index1 삭제 후 강제 병합 실행
   $(basename "$0") -d 60 -f index1 index2         # index1, index2를 60일 기준 삭제 + 병합
+  $(basename "$0") -c index1                      # index1 설정 확인
+  $(basename "$0") -c -i "index1,index2"          # 여러 인덱스 설정 확인
+  $(basename "$0") -u 2000 index1                  # index1의 total_fields.limit을 2000으로 변경
+  $(basename "$0") -u 2000 -i "index1,index2"     # 여러 인덱스의 total_fields.limit 변경
   $(basename "$0") --delete-index index1          # index1 인덱스 전체 삭제
   $(basename "$0") --delete-index -i "index1,index2"  # 여러 인덱스 삭제
 
@@ -97,6 +103,14 @@ while [[ $# -gt 0 ]]; do
             FORCE_MERGE=true
             shift
             ;;
+        -c|--check-settings)
+            CHECK_SETTINGS=true
+            shift
+            ;;
+        -u|--update-limit)
+            UPDATE_LIMIT="$2"
+            shift 2
+            ;;
         --delete-index)
             DELETE_INDEX=true
             shift
@@ -112,6 +126,128 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+# 인덱스 설정 확인 모드
+if [ "$CHECK_SETTINGS" = true ]; then
+    if [ ${#INDEX_NAMES[@]} -eq 0 ] || [ -z "${INDEX_NAMES[0]}" ]; then
+        echo "오류: 설정을 확인할 인덱스가 지정되지 않았습니다." >&2
+        echo "자세한 정보는 '$(basename $0) --help'를 참조하세요." >&2
+        exit 1
+    fi
+
+    echo "=========================================="
+    echo "📋 인덱스 설정 확인"
+    echo "=========================================="
+    for INDEX in "${INDEX_NAMES[@]}"; do
+        echo ""
+        echo "▶ 인덱스: $INDEX"
+        echo "------------------------------------------"
+
+        # flat_settings로 전체 설정 조회
+        SETTINGS=$(curl -s -k -u "$ELASTIC_USER:$ELASTIC_PASSWORD" \
+            "$ELASTIC_HOST/$INDEX/_settings?flat_settings=true&pretty")
+
+        # 인덱스 존재 여부 확인
+        if echo "$SETTINGS" | grep -q '"error"'; then
+            echo "✗ 인덱스를 찾을 수 없습니다"
+            echo "---"
+            continue
+        fi
+
+        # 주요 설정 추출
+        TOTAL_FIELDS=$(echo "$SETTINGS" | grep '"index.mapping.total_fields.limit"' | awk -F'"' '{print $4}')
+        SHARDS=$(echo "$SETTINGS" | grep '"index.number_of_shards"' | awk -F'"' '{print $4}')
+        REPLICAS=$(echo "$SETTINGS" | grep '"index.number_of_replicas"' | awk -F'"' '{print $4}')
+        CREATION_DATE=$(echo "$SETTINGS" | grep '"index.creation_date"' | awk -F'"' '{print $4}')
+
+        echo "  total_fields.limit : ${TOTAL_FIELDS:-1000 (기본값)}"
+        echo "  number_of_shards   : ${SHARDS:-N/A}"
+        echo "  number_of_replicas : ${REPLICAS:-N/A}"
+        if [ -n "$CREATION_DATE" ]; then
+            if [[ "$OSTYPE" == "darwin"* ]]; then
+                CREATED=$(date -r $((CREATION_DATE / 1000)) '+%Y-%m-%d %H:%M:%S')
+            else
+                CREATED=$(date -d @$((CREATION_DATE / 1000)) '+%Y-%m-%d %H:%M:%S')
+            fi
+            echo "  생성 일시          : $CREATED"
+        fi
+
+        # 필드 수 확인
+        FIELD_COUNT=$(curl -s -k -u "$ELASTIC_USER:$ELASTIC_PASSWORD" \
+            "$ELASTIC_HOST/$INDEX/_mapping?pretty" | grep '"type"' | wc -l | tr -d ' ')
+        echo "  현재 매핑 필드 수  : ~${FIELD_COUNT}개"
+        echo "---"
+    done
+    echo ""
+    echo "=========================================="
+    exit 0
+fi
+
+# 인덱스 설정 변경 모드
+if [ -n "$UPDATE_LIMIT" ]; then
+    # 숫자 검증
+    if ! [[ "$UPDATE_LIMIT" =~ ^[0-9]+$ ]]; then
+        echo "오류: total_fields.limit 값은 양의 정수여야 합니다" >&2
+        exit 1
+    fi
+
+    if [ ${#INDEX_NAMES[@]} -eq 0 ] || [ -z "${INDEX_NAMES[0]}" ]; then
+        echo "오류: 설정을 변경할 인덱스가 지정되지 않았습니다." >&2
+        echo "자세한 정보는 '$(basename $0) --help'를 참조하세요." >&2
+        exit 1
+    fi
+
+    echo "=========================================="
+    echo "⚙️  인덱스 설정 변경"
+    echo "=========================================="
+    echo "대상 인덱스:"
+    for INDEX in "${INDEX_NAMES[@]}"; do
+        echo "  • $INDEX"
+    done
+    echo ""
+    echo "변경 내용: total_fields.limit → $UPDATE_LIMIT"
+    echo "=========================================="
+    echo ""
+    read -p "설정을 변경하시겠습니까? (y/N): " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        echo "작업이 취소되었습니다."
+        exit 0
+    fi
+
+    echo ""
+    SUCCESS_COUNT=0
+    FAIL_COUNT=0
+
+    for INDEX in "${INDEX_NAMES[@]}"; do
+        echo "설정 변경 중: $INDEX"
+
+        RESPONSE=$(curl -s -k -u "$ELASTIC_USER:$ELASTIC_PASSWORD" \
+            -X PUT "$ELASTIC_HOST/$INDEX/_settings" \
+            -H "Content-Type: application/json" \
+            -d "{\"index.mapping.total_fields.limit\": $UPDATE_LIMIT}")
+
+        if echo "$RESPONSE" | grep -q '"acknowledged":true'; then
+            echo "✓ $INDEX: total_fields.limit → $UPDATE_LIMIT 변경 완료"
+            ((SUCCESS_COUNT++))
+        else
+            echo "✗ $INDEX: 설정 변경 실패"
+            echo "  응답: $RESPONSE"
+            ((FAIL_COUNT++))
+        fi
+        echo "---"
+    done
+
+    echo ""
+    echo "=========================================="
+    echo "설정 변경 완료"
+    echo "=========================================="
+    echo "성공: ${SUCCESS_COUNT}개"
+    echo "실패: ${FAIL_COUNT}개"
+    echo "총계: ${#INDEX_NAMES[@]}개"
+    echo "=========================================="
+    exit 0
+fi
 
 # 인덱스 삭제 모드인 경우
 if [ "$DELETE_INDEX" = true ]; then

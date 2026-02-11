@@ -46,6 +46,8 @@ Options:
   -l, --list              List all available indices
   -s, --status            Show current status of all indices
   -f, --force-merge       Force merge indices after deletion to optimize disk space
+  -c, --check-settings    Check index settings (total_fields.limit, etc.)
+  -u, --update-limit NUM  Update total_fields.limit for specified indices
   --delete-index          Delete entire index (WARNING: irreversible!)
 
 Examples:
@@ -56,6 +58,10 @@ Examples:
   $(basename $0) -s                                  # Show current status of all indices
   $(basename $0) -f index1                           # Clean and force merge index1
   $(basename $0) -d 60 -f index1 index2              # Clean with 60 days retention and force merge
+  $(basename $0) -c index1                           # Check index1 settings
+  $(basename $0) -c -i "index1,index2"               # Check multiple index settings
+  $(basename $0) -u 2000 index1                      # Update total_fields.limit to 2000
+  $(basename $0) -u 2000 -i "index1,index2"          # Update limit for multiple indices
   $(basename $0) --delete-index index1               # Delete entire index1
   $(basename $0) --delete-index -i "index1,index2"   # Delete multiple indices
 
@@ -96,6 +102,14 @@ while [[ $# -gt 0 ]]; do
             FORCE_MERGE=true
             shift
             ;;
+        -c|--check-settings)
+            CHECK_SETTINGS=true
+            shift
+            ;;
+        -u|--update-limit)
+            UPDATE_LIMIT="$2"
+            shift 2
+            ;;
         --delete-index)
             DELETE_INDEX=true
             shift
@@ -111,6 +125,123 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+# Index settings check mode
+if [ "$CHECK_SETTINGS" = true ]; then
+    if [ ${#INDEX_NAMES[@]} -eq 0 ] || [ -z "${INDEX_NAMES[0]}" ]; then
+        echo "Error: No indices specified for settings check." >&2
+        echo "Try '$(basename $0) --help' for more information." >&2
+        exit 1
+    fi
+
+    echo "=========================================="
+    echo "📋 Index Settings Check"
+    echo "=========================================="
+    for INDEX in "${INDEX_NAMES[@]}"; do
+        echo ""
+        echo "▶ Index: $INDEX"
+        echo "------------------------------------------"
+
+        SETTINGS=$(curl -s -k -u "$ELASTIC_USER:$ELASTIC_PASSWORD" \
+            "$ELASTIC_HOST/$INDEX/_settings?flat_settings=true&pretty")
+
+        if echo "$SETTINGS" | grep -q '"error"'; then
+            echo "✗ Index not found"
+            echo "---"
+            continue
+        fi
+
+        TOTAL_FIELDS=$(echo "$SETTINGS" | grep '"index.mapping.total_fields.limit"' | awk -F'"' '{print $4}')
+        SHARDS=$(echo "$SETTINGS" | grep '"index.number_of_shards"' | awk -F'"' '{print $4}')
+        REPLICAS=$(echo "$SETTINGS" | grep '"index.number_of_replicas"' | awk -F'"' '{print $4}')
+        CREATION_DATE=$(echo "$SETTINGS" | grep '"index.creation_date"' | awk -F'"' '{print $4}')
+
+        echo "  total_fields.limit : ${TOTAL_FIELDS:-1000 (default)}"
+        echo "  number_of_shards   : ${SHARDS:-N/A}"
+        echo "  number_of_replicas : ${REPLICAS:-N/A}"
+        if [ -n "$CREATION_DATE" ]; then
+            if [[ "$OSTYPE" == "darwin"* ]]; then
+                CREATED=$(date -r $((CREATION_DATE / 1000)) '+%Y-%m-%d %H:%M:%S')
+            else
+                CREATED=$(date -d @$((CREATION_DATE / 1000)) '+%Y-%m-%d %H:%M:%S')
+            fi
+            echo "  created_at         : $CREATED"
+        fi
+
+        FIELD_COUNT=$(curl -s -k -u "$ELASTIC_USER:$ELASTIC_PASSWORD" \
+            "$ELASTIC_HOST/$INDEX/_mapping?pretty" | grep '"type"' | wc -l | tr -d ' ')
+        echo "  mapped fields      : ~${FIELD_COUNT}"
+        echo "---"
+    done
+    echo ""
+    echo "=========================================="
+    exit 0
+fi
+
+# Index settings update mode
+if [ -n "$UPDATE_LIMIT" ]; then
+    if ! [[ "$UPDATE_LIMIT" =~ ^[0-9]+$ ]]; then
+        echo "Error: total_fields.limit must be a positive integer" >&2
+        exit 1
+    fi
+
+    if [ ${#INDEX_NAMES[@]} -eq 0 ] || [ -z "${INDEX_NAMES[0]}" ]; then
+        echo "Error: No indices specified for settings update." >&2
+        echo "Try '$(basename $0) --help' for more information." >&2
+        exit 1
+    fi
+
+    echo "=========================================="
+    echo "⚙️  Index Settings Update"
+    echo "=========================================="
+    echo "Target indices:"
+    for INDEX in "${INDEX_NAMES[@]}"; do
+        echo "  • $INDEX"
+    done
+    echo ""
+    echo "Change: total_fields.limit → $UPDATE_LIMIT"
+    echo "=========================================="
+    echo ""
+    read -p "Are you sure you want to update these settings? (y/N): " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        echo "Operation cancelled."
+        exit 0
+    fi
+
+    echo ""
+    SUCCESS_COUNT=0
+    FAIL_COUNT=0
+
+    for INDEX in "${INDEX_NAMES[@]}"; do
+        echo "Updating settings: $INDEX"
+
+        RESPONSE=$(curl -s -k -u "$ELASTIC_USER:$ELASTIC_PASSWORD" \
+            -X PUT "$ELASTIC_HOST/$INDEX/_settings" \
+            -H "Content-Type: application/json" \
+            -d "{\"index.mapping.total_fields.limit\": $UPDATE_LIMIT}")
+
+        if echo "$RESPONSE" | grep -q '"acknowledged":true'; then
+            echo "✓ $INDEX: total_fields.limit → $UPDATE_LIMIT updated"
+            ((SUCCESS_COUNT++))
+        else
+            echo "✗ $INDEX: Failed to update settings"
+            echo "  Response: $RESPONSE"
+            ((FAIL_COUNT++))
+        fi
+        echo "---"
+    done
+
+    echo ""
+    echo "=========================================="
+    echo "Settings Update Complete"
+    echo "=========================================="
+    echo "Success: ${SUCCESS_COUNT}"
+    echo "Failed: ${FAIL_COUNT}"
+    echo "Total: ${#INDEX_NAMES[@]}"
+    echo "=========================================="
+    exit 0
+fi
 
 # Index deletion mode
 if [ "$DELETE_INDEX" = true ]; then
