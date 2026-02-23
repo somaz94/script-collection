@@ -96,7 +96,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         -s|--status)
             echo "모든 인덱스의 현재 상태:"
-            curl -s -k -u "$ELASTIC_USER:$ELASTIC_PASSWORD" "$ELASTIC_HOST/_cat/indices"
+            curl -s -k -u "$ELASTIC_USER:$ELASTIC_PASSWORD" "$ELASTIC_HOST/_cat/indices?v"
             exit 0
             ;;
         -f|--force-merge)

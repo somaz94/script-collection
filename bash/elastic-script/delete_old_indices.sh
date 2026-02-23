@@ -95,7 +95,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         -s|--status)
             echo "Current status of all indices:"
-            curl -s -k -u "$ELASTIC_USER:$ELASTIC_PASSWORD" "$ELASTIC_HOST/_cat/indices"
+            curl -s -k -u "$ELASTIC_USER:$ELASTIC_PASSWORD" "$ELASTIC_HOST/_cat/indices?v"
             exit 0
             ;;
         -f|--force-merge)
