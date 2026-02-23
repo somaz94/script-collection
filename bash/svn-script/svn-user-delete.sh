@@ -29,7 +29,7 @@ USERNAMES=(
 # Verify that sshpass is installed
 # Required for automated SSH authentication
 if ! command -v sshpass &> /dev/null; then
-  echo "❌ sshpass is not installed. Please install it first."
+  echo "✗ sshpass is not installed. Please install it first."
   echo "MacOS: brew install sshpass"
   echo "Ubuntu/Debian: apt-get install sshpass"
   echo "CentOS/RHEL: yum install sshpass"
@@ -40,25 +40,25 @@ fi
 # ---------------------
 # Verify SSH connection to SVN server
 # Ensures the script can communicate with the server
-echo "🔍 Checking connection to SVN server..."
+echo "▸ Checking connection to SVN server..."
 export SSHPASS=$SVN_SERVER_PASSWORD
-if ! sshpass -e ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5 $SVN_SERVER_USER@$SVN_SERVER_IP "echo '✅ SSH connection successful'" &> /dev/null; then
-  echo "❌ Could not connect to SVN server at $SVN_SERVER_IP"
+if ! sshpass -e ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5 $SVN_SERVER_USER@$SVN_SERVER_IP "echo '✔ SSH connection successful'" &> /dev/null; then
+  echo "✗ Could not connect to SVN server at $SVN_SERVER_IP"
   exit 1
 fi
-echo "✅ Successfully connected to SVN server"
+echo "✔ Successfully connected to SVN server"
 
 # Docker Container Check
 # --------------------
 # Verify that the SVN Docker container is running
 # Required for SVN operations
-echo "🔍 Checking Docker container..."
+echo "▸ Checking Docker container..."
 DOCKER_RUNNING=$(sshpass -e ssh -o StrictHostKeyChecking=no $SVN_SERVER_USER@$SVN_SERVER_IP "docker ps | grep $DOCKER_CONTAINER || echo 'not running'")
 if [[ "$DOCKER_RUNNING" == "not running" ]]; then
-  echo "❌ Docker container $DOCKER_CONTAINER is not running on SVN server!"
+  echo "✗ Docker container $DOCKER_CONTAINER is not running on SVN server!"
   exit 1
 fi
-echo "✅ Docker container $DOCKER_CONTAINER is running"
+echo "✔ Docker container $DOCKER_CONTAINER is running"
 
 # Function: Delete User from SVN
 # ----------------------------
@@ -72,7 +72,7 @@ echo "✅ Docker container $DOCKER_CONTAINER is running"
 delete_user_from_svn() {
   local USERNAME=$1
   
-  echo "👤 Checking user '$USERNAME' in SVN..."
+  echo "▸ Checking user '$USERNAME' in SVN..."
   
   # Check if user exists
   export SSHPASS=$SVN_SERVER_PASSWORD
@@ -82,7 +82,7 @@ delete_user_from_svn() {
     SVN_AUTHZ_FILE='$SVN_AUTHZ_FILE'
     SVN_PASSWD_FILE='$SVN_PASSWD_FILE'
     
-    echo "✅ SSH connection successful"
+    echo "✔ SSH connection successful"
     
     # Check user existence in both files
     AUTH_EXISTS=$(docker exec $DOCKER_CONTAINER grep -q "^'$USERNAME'=" $SVN_AUTHZ_FILE && echo true || echo false)
@@ -101,11 +101,11 @@ delete_user_from_svn() {
   
   # Skip if user doesn't exist
   if echo "$USER_EXISTS" | grep -q "NOT_FOUND"; then
-    echo "⚠️ User '$USERNAME' does not exist in SVN configuration"
+    echo "▲ User '$USERNAME' does not exist in SVN configuration"
     return 2
   fi
   
-  echo "👤 Deleting user '$USERNAME' from SVN..."
+  echo "▸ Deleting user '$USERNAME' from SVN..."
   
   # Delete user from SVN configuration
   export SSHPASS=$SVN_SERVER_PASSWORD
@@ -116,7 +116,7 @@ delete_user_from_svn() {
     SVN_AUTHZ_FILE='$SVN_AUTHZ_FILE'
     SVN_PASSWD_FILE='$SVN_PASSWD_FILE'
     
-    echo "✅ SSH connection successful"
+    echo "✔ SSH connection successful"
     
     # Execute commands in Docker container
     DELETED=$(docker exec $DOCKER_CONTAINER bash -c "
@@ -180,10 +180,10 @@ delete_user_from_svn() {
   
   # Check deletion result
   if echo "$DELETED" | grep -q "DELETED"; then
-    echo "✅ Successfully deleted user '$USERNAME' from SVN configuration"
+    echo "✔ Successfully deleted user '$USERNAME' from SVN configuration"
     return 0
   else
-    echo "❌ Failed to delete user '$USERNAME' from SVN configuration"
+    echo "✗ Failed to delete user '$USERNAME' from SVN configuration"
     return 1
   fi
 }
@@ -195,14 +195,14 @@ delete_user_from_svn() {
 #   0: Success
 #   1: Failure
 restart_svn_service() {
-  echo "🔄 Restarting SVN service..."
+  echo "↻ Restarting SVN service..."
   
   # Execute restart command via SSH
   export SSHPASS=$SVN_SERVER_PASSWORD
   sshpass -e ssh -o StrictHostKeyChecking=no $SVN_SERVER_USER@$SVN_SERVER_IP '
     DOCKER_CONTAINER='$DOCKER_CONTAINER'
     
-    echo "✅ SSH connection successful"
+    echo "✔ SSH connection successful"
     
     # Execute commands in Docker container
     RESTART_RESULT=$(docker exec $DOCKER_CONTAINER bash -c "
@@ -239,16 +239,16 @@ restart_svn_service() {
   # Check restart result
   RESULT=$?
   if [ "$RESULT" -eq 0 ]; then
-    echo "✅ Successfully restarted SVN service"
+    echo "✔ Successfully restarted SVN service"
   else
-    echo "❌ Failed to restart SVN service"
+    echo "✗ Failed to restart SVN service"
     return 1
   fi
   
   return 0
 }
 
-echo "🔧 Starting SVN user deletion..."
+echo "▸ Starting SVN user deletion..."
 
 # Process Users
 # ------------
@@ -256,7 +256,7 @@ echo "🔧 Starting SVN user deletion..."
 USER_DELETED=false
 for USERNAME in "${USERNAMES[@]}"; do
   echo "----------------------------------------"
-  echo "🔧 Processing user: $USERNAME"
+  echo "▸ Processing user: $USERNAME"
   
   # Delete user from SVN
   delete_user_from_svn "$USERNAME"
@@ -264,14 +264,14 @@ for USERNAME in "${USERNAMES[@]}"; do
   
   if [ "$RESULT" -eq 0 ]; then
     USER_DELETED=true
-    echo "✨ User deleted successfully"
+    echo "✔ User deleted successfully"
   elif [ "$RESULT" -eq 2 ]; then
-    echo "✨ User doesn't exist, no changes needed"
+    echo "✔ User doesn't exist, no changes needed"
   else
-    echo "❌ Failed to process user"
+    echo "✗ Failed to process user"
   fi
   
-  echo "✨ Done for $USERNAME"
+  echo "✔ Done for $USERNAME"
   echo "----------------------------------------"
 done
 
@@ -279,10 +279,10 @@ done
 # -------------
 # Restart SVN service only if changes were made
 if [ "$USER_DELETED" = "true" ]; then
-  echo "🔧 Changes detected, restarting SVN service..."
+  echo "▸ Changes detected, restarting SVN service..."
   restart_svn_service
 else
-  echo "ℹ️ No changes were made, skipping service restart"
+  echo "◆ No changes were made, skipping service restart"
 fi
 
-echo "🎉 SVN user deletion completed" 
+echo "★ SVN user deletion completed" 

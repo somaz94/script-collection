@@ -23,7 +23,7 @@ USERNAMES=(
 # -------------------------
 # Retrieve API information for required Synology APIs
 # This step is necessary to ensure all required APIs are available
-echo "🔍 Getting API Info..."
+echo "▸ Getting API Info..."
 API_INFO=$(curl -s -X GET "$NAS_URL/webapi/entry.cgi?api=SYNO.API.Info&version=1&method=query&query=SYNO.API.Auth,SYNO.Core.User")
 echo "API Info Response: $API_INFO"
 
@@ -31,7 +31,7 @@ echo "API Info Response: $API_INFO"
 # ----------------------------
 # Authenticate with NAS for core operations
 # This session is required for user management operations
-echo "🔑 Attempting to authenticate with NAS (Core session)..."
+echo "▸ Attempting to authenticate with NAS (Core session)..."
 CORE_AUTH_RESPONSE=$(curl -s -X POST "$NAS_URL/webapi/entry.cgi" \
   --data-urlencode "api=SYNO.API.Auth" \
   --data-urlencode "version=7" \
@@ -48,13 +48,13 @@ CORE_SID=$(echo $CORE_AUTH_RESPONSE | jq -r '.data.sid')
 
 # Validate Core authentication
 if [ -z "$CORE_SID" ] || [ "$CORE_SID" = "null" ]; then
-    echo "❌ Failed to authenticate with NAS (Core session)"
+    echo "✗ Failed to authenticate with NAS (Core session)"
     echo "Error details:"
     echo $CORE_AUTH_RESPONSE | jq '.'
     exit 1
 fi
 
-echo "📦 Successfully authenticated with NAS (Core session)"
+echo "✔ Successfully authenticated with NAS (Core session)"
 echo "----------------------------------------"
 
 # User Deletion Loop
@@ -63,7 +63,7 @@ echo "----------------------------------------"
 for USERNAME in "${USERNAMES[@]}"; do
   # Check for existing user
   # Verifies if the user exists before attempting deletion
-  echo "🔍 Checking if user '$USERNAME' exists..."
+  echo "▸ Checking if user '$USERNAME' exists..."
   USER_INFO=$(curl -s -X POST "$NAS_URL/webapi/entry.cgi" \
     --data-urlencode "api=SYNO.Core.User" \
     --data-urlencode "version=1" \
@@ -73,12 +73,12 @@ for USERNAME in "${USERNAMES[@]}"; do
   
   # Skip if user doesn't exist
   if echo "$USER_INFO" | jq -e '.error' >/dev/null; then
-    echo "⚠️  User '$USERNAME' does not exist!"
+    echo "▲  User '$USERNAME' does not exist!"
     echo "----------------------------------------"
     continue
   fi
 
-  echo "🗑️  Deleting user: $USERNAME"
+  echo "▸  Deleting user: $USERNAME"
   
   # Delete user
   # Removes the user account from the NAS
@@ -91,9 +91,9 @@ for USERNAME in "${USERNAMES[@]}"; do
 
   # Verify deletion success
   if echo "$DELETE_RESPONSE" | jq -e '.success == true' >/dev/null; then
-    echo "✅ User '$USERNAME' deleted successfully"
+    echo "✔ User '$USERNAME' deleted successfully"
   else
-    echo "❌ Failed to delete user '$USERNAME'"
+    echo "✗ Failed to delete user '$USERNAME'"
     echo "Error details:"
     echo $DELETE_RESPONSE | jq '.'
   fi

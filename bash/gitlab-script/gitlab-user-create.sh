@@ -26,7 +26,7 @@ USERNAMES=(
 # This ID is required for adding users to the group
 GROUP_ID=$(curl -s --header "PRIVATE-TOKEN: $PRIVATE_TOKEN" "$GITLAB_URL/api/v4/groups?search=$GROUP_NAME" | jq ".[0].id")
 
-echo "📦 Found Group '$GROUP_NAME' with ID: $GROUP_ID"
+echo "✔ Found Group '$GROUP_NAME' with ID: $GROUP_ID"
 echo "----------------------------------------"
 
 # User Creation Loop
@@ -44,7 +44,7 @@ for USERNAME in "${USERNAMES[@]}"; do
 
   # Skip if user already exists
   if [ "$EXISTING_USER" != "null" ]; then
-    echo "⚠️  User '$USERNAME' already exists!"
+    echo "▲  User '$USERNAME' already exists!"
     echo "----------------------------------------"
     continue
   fi
@@ -53,7 +53,7 @@ for USERNAME in "${USERNAMES[@]}"; do
   # ------------
   # Create new user with specified parameters
   # skip_confirmation=true allows immediate access without email verification
-  echo "🔧 Creating user: $USERNAME ($EMAIL)"
+  echo "▸ Creating user: $USERNAME ($EMAIL)"
   USER_ID=$(curl -s --request POST "$GITLAB_URL/api/v4/users" \
     --header "PRIVATE-TOKEN: $PRIVATE_TOKEN" \
     --data "email=$EMAIL&username=$USERNAME&name=$NAME&password=$DEFAULT_PASSWORD&skip_confirmation=true" \
@@ -61,12 +61,12 @@ for USERNAME in "${USERNAMES[@]}"; do
 
   # Verify user creation success
   if [ "$USER_ID" = "null" ]; then
-    echo "❌ Failed to create user '$USERNAME'"
+    echo "✗ Failed to create user '$USERNAME'"
     echo "----------------------------------------"
     continue
   fi
 
-  echo "✅ User '$USERNAME' created with ID: $USER_ID"
+  echo "✔ User '$USERNAME' created with ID: $USER_ID"
 
   # Group Membership Management
   # --------------------------
@@ -74,12 +74,12 @@ for USERNAME in "${USERNAMES[@]}"; do
   # Access levels:
   # - 40: Maintainer
   # - 30: Developer
-  echo "👥 Adding '$USERNAME' to group '$GROUP_NAME'"
+  echo "▸ Adding '$USERNAME' to group '$GROUP_NAME'"
   curl -s --request POST "$GITLAB_URL/api/v4/groups/$GROUP_ID/members" \
     --header "PRIVATE-TOKEN: $PRIVATE_TOKEN" \
     --data "user_id=$USER_ID&access_level=40" # Maintainer access level=30 Developer access level=40 Maintainer
 
-  echo "✨ Done for $USERNAME"
+  echo "✔ Done for $USERNAME"
   echo ""
   echo "----------------------------------------"
 done

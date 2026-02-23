@@ -31,7 +31,7 @@ USERNAMES=(
 # Verify that sshpass is installed
 # Required for automated SSH authentication
 if ! command -v sshpass &> /dev/null; then
-  echo "❌ sshpass is not installed. Please install it first."
+  echo "✗ sshpass is not installed. Please install it first."
   echo "MacOS: brew install sshpass"
   echo "Ubuntu/Debian: apt-get install sshpass"
   echo "CentOS/RHEL: yum install sshpass"
@@ -42,25 +42,25 @@ fi
 # ---------------------
 # Verify SSH connection to SVN server
 # Ensures the script can communicate with the server
-echo "🔍 Checking connection to SVN server..."
+echo "▸ Checking connection to SVN server..."
 export SSHPASS=$SVN_SERVER_PASSWORD
-if ! sshpass -e ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5 $SVN_SERVER_USER@$SVN_SERVER_IP "echo '✅ SSH connection successful'" &> /dev/null; then
-  echo "❌ Could not connect to SVN server at $SVN_SERVER_IP"
+if ! sshpass -e ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5 $SVN_SERVER_USER@$SVN_SERVER_IP "echo '✔ SSH connection successful'" &> /dev/null; then
+  echo "✗ Could not connect to SVN server at $SVN_SERVER_IP"
   exit 1
 fi
-echo "✅ Successfully connected to SVN server"
+echo "✔ Successfully connected to SVN server"
 
 # Docker Container Check
 # --------------------
 # Verify that the SVN Docker container is running
 # Required for SVN operations
-echo "🔍 Checking Docker container..."
+echo "▸ Checking Docker container..."
 DOCKER_RUNNING=$(sshpass -e ssh -o StrictHostKeyChecking=no $SVN_SERVER_USER@$SVN_SERVER_IP "docker ps | grep $DOCKER_CONTAINER || echo 'not running'")
 if [[ "$DOCKER_RUNNING" == "not running" ]]; then
-  echo "❌ Docker container $DOCKER_CONTAINER is not running on SVN server!"
+  echo "✗ Docker container $DOCKER_CONTAINER is not running on SVN server!"
   exit 1
 fi
-echo "✅ Docker container $DOCKER_CONTAINER is running"
+echo "✔ Docker container $DOCKER_CONTAINER is running"
 
 # Function: Add User to SVN
 # ------------------------
@@ -75,12 +75,12 @@ add_user_to_svn() {
   local USERNAME=$1
   local USER_WAS_ADDED=false
   
-  echo "👤 Adding user '$USERNAME' to SVN with read-write permissions..."
+  echo "▸ Adding user '$USERNAME' to SVN with read-write permissions..."
   
   # Check if user already exists
   export SSHPASS=$SVN_SERVER_PASSWORD
   CHECK_RESULT=$(sshpass -e ssh -o StrictHostKeyChecking=no $SVN_SERVER_USER@$SVN_SERVER_IP "
-    echo '✅ SSH connection successful'
+    echo '✔ SSH connection successful'
     
     # Check user existence in both files
     AUTHZ_EXISTS=\$(docker exec $DOCKER_CONTAINER bash -c \"grep -q \\\"^$USERNAME=\\\" $SVN_AUTHZ_FILE && echo true || echo false\")
@@ -100,16 +100,16 @@ add_user_to_svn() {
   
   # Skip if user already exists in both files
   if echo "$CHECK_RESULT" | grep -q "USER_EXISTS=BOTH"; then
-    echo "ℹ️ User '$USERNAME' already exists in SVN configuration"
+    echo "◆ User '$USERNAME' already exists in SVN configuration"
     return 2
   fi
   
-  echo "🔧 User does not exist in both files, proceeding with adding..."
+  echo "▸ User does not exist in both files, proceeding with adding..."
   
   # Add user to SVN configuration
   export SSHPASS=$SVN_SERVER_PASSWORD
   MODIFY_RESULT=$(sshpass -e ssh -o StrictHostKeyChecking=no $SVN_SERVER_USER@$SVN_SERVER_IP "
-    echo '✅ SSH connection successful'
+    echo '✔ SSH connection successful'
     
     # Execute commands in Docker container
     USER_MODIFIED=\$(docker exec $DOCKER_CONTAINER bash -c \"
@@ -173,14 +173,14 @@ add_user_to_svn() {
     
     # Check modification status
     if echo \"\$USER_MODIFIED\" | grep -q \"USER_MODIFIED=true\"; then
-      echo \"✅ User configuration modified\"
+      echo \"✔ User configuration modified\"
       exit 0
     else 
       if echo \"\$USER_MODIFIED\" | grep -q \"User already exists in both SVN files\"; then
-        echo \"ℹ️ User already exists in both SVN files\"
+        echo \"◆ User already exists in both SVN files\"
         exit 2
       else
-        echo \"ℹ️ No modifications were made but user might still need updates\"
+        echo \"◆ No modifications were made but user might still need updates\"
         exit 0
       fi
     fi
@@ -192,13 +192,13 @@ add_user_to_svn() {
   # Check operation result
   RESULT=$?
   if [ "$RESULT" -eq 0 ]; then
-    echo "✅ Successfully added or updated user '$USERNAME' in SVN configuration"
+    echo "✔ Successfully added or updated user '$USERNAME' in SVN configuration"
     return 0
   elif [ "$RESULT" -eq 2 ]; then
-    echo "ℹ️ User '$USERNAME' already exists in SVN configuration"
+    echo "◆ User '$USERNAME' already exists in SVN configuration"
     return 2
   else
-    echo "❌ Failed to add user '$USERNAME' to SVN configuration"
+    echo "✗ Failed to add user '$USERNAME' to SVN configuration"
     return 1
   fi
 }
@@ -210,12 +210,12 @@ add_user_to_svn() {
 #   0: Success
 #   1: Failure
 restart_svn_service() {
-  echo "🔄 Restarting SVN service..."
+  echo "↻ Restarting SVN service..."
   
   # Execute restart command via SSH
   export SSHPASS=$SVN_SERVER_PASSWORD
   sshpass -e ssh -o StrictHostKeyChecking=no $SVN_SERVER_USER@$SVN_SERVER_IP "
-    echo '✅ SSH connection successful'
+    echo '✔ SSH connection successful'
     
     # Execute commands in Docker container
     docker exec $DOCKER_CONTAINER bash -c '
@@ -248,16 +248,16 @@ restart_svn_service() {
   # Check restart result
   RESULT=$?
   if [ "$RESULT" -eq 0 ]; then
-    echo "✅ Successfully restarted SVN service"
+    echo "✔ Successfully restarted SVN service"
   else
-    echo "❌ Failed to restart SVN service"
+    echo "✗ Failed to restart SVN service"
     return 1
   fi
   
   return 0
 }
 
-echo "🔧 Starting SVN user configuration..."
+echo "▸ Starting SVN user configuration..."
 
 # Process Users
 # ------------
@@ -265,7 +265,7 @@ echo "🔧 Starting SVN user configuration..."
 USER_ADDED=false
 for USERNAME in "${USERNAMES[@]}"; do
   echo "----------------------------------------"
-  echo "🔧 Processing user: $USERNAME"
+  echo "▸ Processing user: $USERNAME"
   
   # Add user to SVN
   add_user_to_svn "$USERNAME"
@@ -273,14 +273,14 @@ for USERNAME in "${USERNAMES[@]}"; do
   
   if [ "$RESULT" -eq 0 ]; then
     USER_ADDED=true
-    echo "✨ User added successfully"
+    echo "✔ User added successfully"
   elif [ "$RESULT" -eq 2 ]; then
-    echo "✨ User already exists, no changes needed"
+    echo "✔ User already exists, no changes needed"
   else
-    echo "❌ Failed to process user"
+    echo "✗ Failed to process user"
   fi
   
-  echo "✨ Done for $USERNAME"
+  echo "✔ Done for $USERNAME"
   echo "----------------------------------------"
 done
 
@@ -288,10 +288,10 @@ done
 # -------------
 # Restart SVN service only if changes were made
 if [ "$USER_ADDED" = "true" ]; then
-  echo "🔧 Changes detected, restarting SVN service..."
+  echo "▸ Changes detected, restarting SVN service..."
   restart_svn_service
 else
-  echo "ℹ️ No changes were made, skipping service restart"
+  echo "◆ No changes were made, skipping service restart"
 fi
 
-echo "🎉 SVN user configuration completed" 
+echo "★ SVN user configuration completed" 

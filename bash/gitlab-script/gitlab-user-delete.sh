@@ -22,7 +22,7 @@ USERNAMES=(
 # This ID is required for removing users from the group
 GROUP_ID=$(curl -s --header "PRIVATE-TOKEN: $PRIVATE_TOKEN" "$GITLAB_URL/api/v4/groups?search=$GROUP_NAME" | jq ".[0].id")
 
-echo "📦 Found Group '$GROUP_NAME' with ID: $GROUP_ID"
+echo "✔ Found Group '$GROUP_NAME' with ID: $GROUP_ID"
 echo "----------------------------------------"
 
 # User Deletion Loop
@@ -35,7 +35,7 @@ for USERNAME in "${USERNAMES[@]}"; do
   
   # Skip if user doesn't exist
   if [ "$EXISTING_USER" = "null" ]; then
-    echo "⚠️  User '$USERNAME' does not exist!"
+    echo "▲  User '$USERNAME' does not exist!"
     echo "----------------------------------------"
     continue
   fi
@@ -48,7 +48,7 @@ for USERNAME in "${USERNAMES[@]}"; do
   # ----------------------
   # Remove user from the specified group
   # This must be done before user deletion to avoid orphaned references
-  echo "🗑️  Removing '$USERNAME' from group '$GROUP_NAME'"
+  echo "▸  Removing '$USERNAME' from group '$GROUP_NAME'"
   curl -s --request DELETE "$GITLAB_URL/api/v4/groups/$GROUP_ID/members/$USER_ID" \
     --header "PRIVATE-TOKEN: $PRIVATE_TOKEN"
 
@@ -56,12 +56,12 @@ for USERNAME in "${USERNAMES[@]}"; do
   # ------------
   # Delete the user account from GitLab
   # This is a permanent operation and cannot be undone
-  echo "🔧 Deleting user: $USERNAME"
+  echo "▸ Deleting user: $USERNAME"
   curl -s --request DELETE "$GITLAB_URL/api/v4/users/$USER_ID" \
     --header "PRIVATE-TOKEN: $PRIVATE_TOKEN"
 
-  echo "✅ User '$USERNAME' deleted successfully"
-  echo "✨ Done for $USERNAME"
+  echo "✔ User '$USERNAME' deleted successfully"
+  echo "✔ Done for $USERNAME"
   echo ""
   echo "----------------------------------------"
 done 
