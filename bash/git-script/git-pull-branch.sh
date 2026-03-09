@@ -69,9 +69,9 @@ echo -e "${BLUE}=== Enhanced Git Pull All Script ===${NC}"
 
 # Display target branches
 if [ ${#BRANCHES[@]} -gt 0 ]; then
-    echo -e "${CYAN}🎯 Target branches: ${BRANCHES[*]}${NC}"
+    echo -e "${CYAN}Target branches: ${BRANCHES[*]}${NC}"
 else
-    echo -e "${CYAN}🎯 Target: Current branch in each repository${NC}"
+    echo -e "${CYAN}Target: Current branch in each repository${NC}"
 fi
 echo ""
 
@@ -115,7 +115,7 @@ check_branch_exists() {
         return 0
     fi
     
-    echo -e "${YELLOW}   ⚠️  Branch '$branch' not found in $repo_name${NC}"
+    echo -e "${YELLOW}   Branch '$branch' not found in $repo_name${NC}"
     return 1
 }
 
@@ -133,17 +133,17 @@ switch_to_branch() {
     
     # Try to checkout existing local branch
     if git checkout "$branch" >/dev/null 2>&1; then
-        echo -e "${GREEN}   ✅ Switched to local branch: $branch${NC}"
+        echo -e "${GREEN}   Switched to local branch: $branch${NC}"
         return 0
     fi
     
     # Try to checkout and track remote branch
     if git checkout -b "$branch" "origin/$branch" >/dev/null 2>&1; then
-        echo -e "${GREEN}   ✅ Created and switched to branch: $branch (tracking origin/$branch)${NC}"
+        echo -e "${GREEN}   Created and switched to branch: $branch (tracking origin/$branch)${NC}"
         return 0
     fi
     
-    echo -e "${RED}   ❌ Failed to switch to branch: $branch${NC}"
+    echo -e "${RED}   Failed to switch to branch: $branch${NC}"
     return 1
 }
 
@@ -153,20 +153,20 @@ check_git_status() {
     
     # Check for detached HEAD
     if ! git symbolic-ref HEAD >/dev/null 2>&1; then
-        echo -e "${RED}⚠️  ${repo_name}: In detached HEAD state${NC}"
+        echo -e "${RED}${repo_name}: In detached HEAD state${NC}"
         return 1
     fi
     
     # Check for uncommitted changes
     if git status --porcelain | grep -q .; then
-        echo -e "${YELLOW}⚠️  ${repo_name}: Working directory not clean${NC}"
+        echo -e "${YELLOW}${repo_name}: Working directory not clean${NC}"
         if [ "$STASH_MODE" = true ]; then
             echo -e "${BLUE}   Stashing changes...${NC}"
             if git stash push -m "Auto-stash before pull $(date)"; then
-                echo -e "${GREEN}   ✅ Changes stashed${NC}"
+                echo -e "${GREEN}   Changes stashed${NC}"
                 return 0
             else
-                echo -e "${RED}   ❌ Failed to stash changes${NC}"
+                echo -e "${RED}   Failed to stash changes${NC}"
                 return 1
             fi
         elif [ "$INTERACTIVE_MODE" = true ]; then
@@ -174,10 +174,10 @@ check_git_status() {
             case "$response" in
                 y|Y)
                     if git stash push -m "Interactive stash before pull $(date)"; then
-                        echo -e "${GREEN}   ✅ Changes stashed${NC}"
+                        echo -e "${GREEN}   Changes stashed${NC}"
                         return 0
                     else
-                        echo -e "${RED}   ❌ Failed to stash changes${NC}"
+                        echo -e "${RED}   Failed to stash changes${NC}"
                         return 1
                     fi
                     ;;
@@ -207,23 +207,23 @@ perform_pull() {
     if [ "$FORCE_MODE" = true ]; then
         echo -e "${PURPLE}   Force mode: Resetting to remote...${NC}"
         if git fetch origin && git reset --hard "origin/$branch"; then
-            echo -e "${GREEN}   ✅ Force pulled successfully${NC}"
+            echo -e "${GREEN}   Force pulled successfully${NC}"
             return 0
         else
-            echo -e "${RED}   ❌ Force pull failed${NC}"
+            echo -e "${RED}   Force pull failed${NC}"
             return 1
         fi
     fi
     
     # Fetch latest changes
     if ! git fetch origin; then
-        echo -e "${RED}   ❌ Failed to fetch from origin${NC}"
+        echo -e "${RED}   Failed to fetch from origin${NC}"
         return 1
     fi
     
     # Attempt normal pull
     if git pull origin "$branch" 2>/tmp/git_pull_error_$$; then
-        echo -e "${GREEN}   ✅ Pull successful${NC}"
+        echo -e "${GREEN}   Pull successful${NC}"
         return 0
     else
         local error_msg=$(cat /tmp/git_pull_error_$$ 2>/dev/null)
@@ -231,7 +231,7 @@ perform_pull() {
         
         # Check for conflicts
         if echo "$error_msg" | grep -q "CONFLICT\|Automatic merge failed"; then
-            echo -e "${RED}   ⚔️  Merge conflict detected!${NC}"
+            echo -e "${RED}   Merge conflict detected!${NC}"
             CONFLICT_REPOS+=("$repo_name ($branch)")
             
             if [ "$INTERACTIVE_MODE" = true ]; then
@@ -244,30 +244,30 @@ perform_pull() {
                         echo -e "${BLUE}   Opening merge tool... (exit when done)${NC}"
                         git mergetool
                         if git status --porcelain | grep -q "^UU\|^AA\|^DD"; then
-                            echo -e "${RED}   ❌ Conflicts still remain${NC}"
+                            echo -e "${RED}   Conflicts still remain${NC}"
                             return 1
                         else
-                            echo -e "${GREEN}   ✅ Conflicts resolved, committing...${NC}"
+                            echo -e "${GREEN}   Conflicts resolved, committing...${NC}"
                             git commit --no-edit
                             return 0
                         fi
                         ;;
                     abort|a)
                         git merge --abort
-                        echo -e "${YELLOW}   ⏪ Merge aborted${NC}"
+                        echo -e "${YELLOW}   Merge aborted${NC}"
                         return 1
                         ;;
                     *)
-                        echo -e "${YELLOW}   ⏭️  Skipping conflict resolution${NC}"
+                        echo -e "${YELLOW}   Skipping conflict resolution${NC}"
                         return 1
                         ;;
                 esac
             else
-                echo -e "${YELLOW}   💡 To resolve: cd ${repo_name} && git checkout $branch && git status${NC}"
+                echo -e "${YELLOW}   To resolve: cd ${repo_name} && git checkout $branch && git status${NC}"
                 return 1
             fi
         else
-            echo -e "${RED}   ❌ Pull failed: ${error_msg}${NC}"
+            echo -e "${RED}   Pull failed: ${error_msg}${NC}"
             return 1
         fi
     fi
@@ -278,11 +278,11 @@ process_repository() {
     local dir="$1"
     local repo_name="${dir%/}"
     
-    echo -e "${YELLOW}📁 Processing: ${repo_name}${NC}"
+    echo -e "${YELLOW}Processing: ${repo_name}${NC}"
     
     # Move to the directory
     cd "$dir" || {
-        echo -e "${RED}❌ Failed to enter directory: ${repo_name}${NC}"
+        echo -e "${RED}Failed to enter directory: ${repo_name}${NC}"
         ERROR_COUNT=$((ERROR_COUNT + 1))
         return 1
     }
@@ -301,7 +301,7 @@ process_repository() {
         if [ -n "$current_branch" ]; then
             branches_to_process=("$current_branch")
         else
-            echo -e "${RED}   ❌ Could not determine current branch${NC}"
+            echo -e "${RED}   Could not determine current branch${NC}"
             ERROR_COUNT=$((ERROR_COUNT + 1))
             return 1
         fi
@@ -312,7 +312,7 @@ process_repository() {
     
     # Process each branch
     for branch in "${branches_to_process[@]}"; do
-        echo -e "${CYAN}  🌿 Processing branch: $branch${NC}"
+        echo -e "${CYAN}  Processing branch: $branch${NC}"
         
         # Check if branch exists
         if ! check_branch_exists "$branch" "$repo_name"; then
@@ -336,7 +336,7 @@ process_repository() {
         if [ $status_result -eq 0 ]; then
             # Execute pull
             if perform_pull "$repo_name" "$branch"; then
-                echo -e "${GREEN}     ✅ $branch updated successfully${NC}"
+                echo -e "${GREEN}     $branch updated successfully${NC}"
             else
                 if [[ " ${CONFLICT_REPOS[*]} " =~ " $repo_name ($branch) " ]]; then
                     CONFLICT_COUNT=$((CONFLICT_COUNT + 1))
@@ -364,7 +364,7 @@ process_repository() {
     # Switch back to original branch if specified branches were processed
     if [ ${#BRANCHES[@]} -gt 0 ] && [ -n "$original_branch" ]; then
         git checkout "$original_branch" >/dev/null 2>&1
-        echo -e "${BLUE}  ↩️  Switched back to: $original_branch${NC}"
+        echo -e "${BLUE}  Switched back to: $original_branch${NC}"
     fi
     
     if [ "$repo_success" = true ]; then
@@ -385,28 +385,28 @@ for dir in */; do
             
             # Return to original directory
             cd "$ORIGINAL_DIR" || {
-                echo -e "${RED}❌ Failed to return to original directory${NC}"
+                echo -e "${RED}Failed to return to original directory${NC}"
                 exit 1
             }
         else
-            echo -e "${BLUE}ℹ️  Skipping ${dir%/}: Not a git repository${NC}"
+            echo -e "${BLUE}Skipping ${dir%/}: Not a git repository${NC}"
         fi
     fi
 done
 
 # Result summary
 echo -e "${BLUE}=== Summary ===${NC}"
-echo -e "${GREEN}✅ Successfully updated: $SUCCESS_COUNT repositories${NC}"
-echo -e "${RED}❌ Failed: $ERROR_COUNT repositories${NC}"
-echo -e "${PURPLE}⚔️  Conflicts: $CONFLICT_COUNT repositories${NC}"
-echo -e "${YELLOW}⏭️  Skipped: $SKIPPED_COUNT repositories${NC}"
-echo -e "${CYAN}🌿 Branch not found: $BRANCH_NOT_FOUND_COUNT cases${NC}"
-echo -e "${YELLOW}⚠️  Uncommitted changes: $DIRTY_COUNT cases${NC}"
+echo -e "${GREEN}Successfully updated: $SUCCESS_COUNT repositories${NC}"
+echo -e "${RED}Failed: $ERROR_COUNT repositories${NC}"
+echo -e "${PURPLE}Conflicts: $CONFLICT_COUNT repositories${NC}"
+echo -e "${YELLOW}Skipped: $SKIPPED_COUNT repositories${NC}"
+echo -e "${CYAN}Branch not found: $BRANCH_NOT_FOUND_COUNT cases${NC}"
+echo -e "${YELLOW}Uncommitted changes: $DIRTY_COUNT cases${NC}"
 
 # Display list of repositories with conflicts
 if [ ${#CONFLICT_REPOS[@]} -gt 0 ]; then
     echo ""
-    echo -e "${PURPLE}🔥 Repositories with conflicts:${NC}"
+    echo -e "${PURPLE}Repositories with conflicts:${NC}"
     for repo in "${CONFLICT_REPOS[@]}"; do
         echo -e "${PURPLE}   • $repo${NC}"
         repo_name=$(echo "$repo" | cut -d'(' -f1 | xargs)
@@ -418,7 +418,7 @@ fi
 # Display list of repositories with missing branches
 if [ ${#BRANCH_NOT_FOUND_REPOS[@]} -gt 0 ]; then
     echo ""
-    echo -e "${CYAN}🌿 Branches not found:${NC}"
+    echo -e "${CYAN}Branches not found:${NC}"
     for repo in "${BRANCH_NOT_FOUND_REPOS[@]}"; do
         echo -e "${CYAN}   • $repo${NC}"
     done
@@ -427,16 +427,16 @@ fi
 # Display list of repositories with uncommitted changes
 if [ ${#DIRTY_REPOS[@]} -gt 0 ]; then
     echo ""
-    echo -e "${YELLOW}⚠️  Repositories with uncommitted changes:${NC}"
+    echo -e "${YELLOW}Repositories with uncommitted changes:${NC}"
     for repo in "${DIRTY_REPOS[@]}"; do
         echo -e "${YELLOW}   • $repo${NC}"
     done
-    echo -e "   ${BLUE}💡 Use --stash option to automatically stash changes before pull${NC}"
+    echo -e "   ${BLUE}Use --stash option to automatically stash changes before pull${NC}"
 fi
 
 if [ ${#CONFLICT_REPOS[@]} -gt 0 ]; then
     echo ""
-    echo -e "${BLUE}💡 Conflict resolution tips:${NC}"
+    echo -e "${BLUE}Conflict resolution tips:${NC}"
     echo -e "   1. ${YELLOW}cd <repo-name>${NC}"
     echo -e "   2. ${YELLOW}git checkout <branch-name>${NC}"
     echo -e "   3. ${YELLOW}git status${NC} (see conflicted files)"
@@ -448,9 +448,9 @@ fi
 # Overall result evaluation
 total_issues=$((ERROR_COUNT + CONFLICT_COUNT))
 if [ $total_issues -eq 0 ]; then
-    echo -e "${GREEN}🎉 All git repositories processed successfully!${NC}"
+    echo -e "${GREEN}All git repositories processed successfully!${NC}"
     exit 0
 else
-    echo -e "${YELLOW}⚠️  Some repositories need attention. Check the details above.${NC}"
+    echo -e "${YELLOW}Some repositories need attention. Check the details above.${NC}"
     exit 1
 fi
