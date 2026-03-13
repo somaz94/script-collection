@@ -36,6 +36,4 @@ if [ "${STATE}" == "NotReady" ];then
     # Cleanup
     sudo rm -f /$HOME/monthly_maintenance/send_mail
     exit 0
-    echo ""
-    exit 0
 fi

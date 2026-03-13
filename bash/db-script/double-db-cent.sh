@@ -81,4 +81,5 @@ try:
     final_df.to_excel(xlsx_file, index=False, engine='xlsxwriter')
     print(f'Excel file created at {xlsx_file}')
 except Exception as e:
-    p
+    print(f'Failed to create Excel file: {e}')
+"

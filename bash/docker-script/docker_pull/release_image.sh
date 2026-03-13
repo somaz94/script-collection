@@ -1,17 +1,17 @@
 #! /usr/bin/env bash
 
-#image 변수
+# Image variables
 tag=""
 harbor=""
 
-####환경변수
+# Environment variables
 zone=$(pwd)
 relese_chart=$(cat $zone/relese_chart.txt)
 
-####각 디렉토리 생성
+# Create directory for images
 mkdir -p $zone/image/$tag
 
-#### relese image 수집
+# Collect release images
 cd $zone/image/$tag
 for image in $relese_chart
 do

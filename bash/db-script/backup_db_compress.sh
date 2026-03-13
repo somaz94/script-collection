@@ -2,7 +2,7 @@
 
 # Define variables
 DB_HOST="your_db_host" 
-DB_PORT="3306"  # MySQL 포트 추가
+DB_PORT="3306"  # MySQL port
 DB_USER="your_db_user"
 DB_PASS="your_db_password"
 DBS=("db1" "db2" "db3" "db4")
