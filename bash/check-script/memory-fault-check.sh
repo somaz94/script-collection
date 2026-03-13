@@ -30,7 +30,7 @@ C=`sudo cat /var/log/messages |grep -i $M |grep -i $F |wc -l`
 # List of email recipients for notifications
 # Add email addresses to receive memory fault alerts
 MAILTO=(
-"메일주소 추가"
+"add-email@example.com"
 )
  
 # Alert Condition

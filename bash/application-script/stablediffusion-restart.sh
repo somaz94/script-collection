@@ -8,13 +8,13 @@
 # Initial Message
 # -------------
 # Display script execution start message
-echo "Stable Diffusion WebUI 인스턴스 재시작 스크립트 실행 중..."
+echo "Restarting all Stable Diffusion WebUI instances..."
 
 # Process Cleanup
 # -------------
 # Kill all existing Python processes to ensure clean restart
 # This prevents port conflicts and ensures fresh instances
-echo "모든 Python 프로세스 종료 중..."
+echo "Killing all Python processes..."
 ps aux | grep python3 | grep -v grep | awk '{print $2}' | xargs kill -9
 
 # Wait for processes to fully terminate
@@ -50,7 +50,7 @@ do
     # Remove existing log file if present
     # This prevents log file size issues and ensures clean logs
     if [[ -f $nohup_file ]]; then
-        echo "기존 로그 파일 ${nohup_file} 삭제 중..."
+        echo "Removing existing log file ${nohup_file}..."
         rm $nohup_file
     fi
 
@@ -62,7 +62,7 @@ do
     # - --port: Assigns a unique port number
     # - nohup: Runs the process in the background
     # - Output redirection: Captures all output in the log file
-    echo "GPU ${gpu} 에서 포트 ${start_port} 로 Stable Diffusion WebUI 인스턴스 실행 중..."
+    echo "Starting Stable Diffusion WebUI on GPU ${gpu}, port ${start_port}..."
     CUDA_VISIBLE_DEVICES=$gpu nohup ./webui.sh --listen --port $start_port > $nohup_file 2>&1 &
 
     # Port Increment
@@ -75,4 +75,4 @@ done
 # Completion Message
 # ----------------
 # Notify user that all instances have been restarted
-echo "모든 Stable Diffusion WebUI 인스턴스가 재시작되었습니다."
+echo "All Stable Diffusion WebUI instances have been restarted."

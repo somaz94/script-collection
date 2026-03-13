@@ -8,7 +8,7 @@ export OS_PROJECT_DOMAIN_NAME=default
 export OS_USER_DOMAIN_NAME=default
 export OS_PROJECT_NAME=admin
 export OS_USERNAME=admin
-export OS_PASSWORD=somaz
+export OS_PASSWORD=${OS_PASSWORD:-"changeme"}
 export OS_AUTH_URL=http://keystone.openstack.svc.cluster.local:8080/v3
 export OS_IDENTITY_API_VERSION=3
 export OS_IMAGE_API_VERSION=2
@@ -66,7 +66,7 @@ echo ""
 # VM Distribution Check
 # ------------------
 # Check number of running VMs on each hypervisor
-echo "############ 각 노드별 Running 중인 VM 수 확인"
+echo "############ Running VMs per hypervisor node"
 rm -f /tmp/opst_running_vms
 for hyp in $hyplist; do
   /usr/bin/nova list --all --host=$hyp | grep Running | wc -l | awk -v hypname=$hyp '{printf "%-20s running VMs = %s\n",hypname,$1}' >> /tmp/opst_running_vms
@@ -77,14 +77,14 @@ echo ""
 # Ceph Storage Status
 # ----------------
 # Check Ceph storage usage and health
-echo "############ ceph 사용량 확인"
+echo "############ Ceph usage check"
 ssh $cephmaster "sudo ceph df"
 echo ""
 
 # Storage Usage Report
 # -----------------
 # Check storage usage across different systems
-echo "############ Storage별 사용량(간략)"
+echo "############ Storage usage summary"
 echo "### ceph"
 ssh $cephmaster "sudo ceph df" | awk 'NR==3{printf"%s/%s (%s%)\n",$3,$1,$4}'
 echo ""
@@ -92,21 +92,21 @@ echo ""
 # OSD Usage Check
 # ------------
 # Check usage of the largest OSD
-echo "############ 가장 큰 osd의 사용량"
+echo "############ Largest OSD usage"
 ssh $cephmaster "sudo ceph osd df" | egrep -v 'VAR|TOTAL' | sort -rnk8 | awk 'NR==1 {printf "Largest osd usage = %s %\n",$8}'
 echo ""
 
 # Ceph Health Check
 # -------------
 # Check detailed Ceph cluster health
-echo "############ ceph 상태 확인"
+echo "############ Ceph health status"
 ssh $cephmaster "sudo ceph health detail"
 echo ""
 
 # OSD Usage Report
 # -------------
 # Report usage for all OSDs
-echo "############ osd 사용량"
+echo "############ OSD usage"
 ssh $cephmaster "sudo ceph osd df" | egrep -v 'VAR|TOTAL' | sort -rnk8 | awk '{printf "osd ID %-2s = %s %\n",$1,$8}'
 echo ""
 
@@ -165,7 +165,7 @@ echo ""
 # Kubernetes Pod Status Check
 # ------------------------
 # Check running pods across all namespaces
-echo "############ Namespace별 running 중인 모든 pod 개수"
+echo "############ Running pod count per namespace"
 for kubens in $kubenss; do
   /usr/local/bin/kubectl get po -n $kubens 2> /dev/null | grep Runn | wc -l | awk -v ns="$kubens" '{printf "### namespace : %s running pods = %s\n",ns,$1}'
 done
@@ -174,21 +174,21 @@ echo ""
 # Not Ready Pods Check
 # -----------------
 # Check for pods that are running but not ready
-echo "############ Ready가 0인 pod 표시"
+echo "############ Pods with 0 ready containers"
 /usr/local/bin/kubectl get po --all-namespaces -o wide | grep Running | awk 'index($3, "0")'
 echo ""
 
 # Abnormal Pod Status Check
 # ----------------------
 # Check for pods that are neither running nor completed
-echo "############ Running 혹은 Completed 제외한 pod"
+echo "############ Pods not in Running or Completed state"
 /usr/local/bin/kubectl get po --all-namespaces | grep -vi 'runn\|compl'
 echo ""
 
 # Pod Distribution Check
 # -------------------
 # Check for pods that need to be redistributed across nodes
-echo "############ 분배가 필요한 pod 확인"
+echo "############ Pods requiring redistribution"
 for kubens in $kubenss; do
   # Check Deployments
   deploys=$(/usr/local/bin/kubectl -n $kubens get deploy 2> /dev/null | awk '$2 != 1 {print $1}' | awk 'NR>1 {print $1}')

@@ -2,11 +2,11 @@
 
 version=16.3.4-ce.0  # write your update version
 
-# # 백업 생성 (선택적)
+# # Create backup (optional)
 # echo "Creating backup before upgrade..."
 # sudo gitlab-rake gitlab:backup:create
 
-# 현재 버전 확인
+# Check current version
 echo "Current GitLab version"
 sudo gitlab-rake gitlab:env:info
 
@@ -19,11 +19,11 @@ sleep 10
 sudo gitlab-ctl restart
 sleep 10
 
-# 업그레이드 후 상태 확인
+# Check status after upgrade
 echo "Checking GitLab status..."
 sudo gitlab-ctl status
 
-# 업그레이드 후 버전 확인
+# Check version after upgrade
 echo "New GitLab version"
 sudo gitlab-rake gitlab:env:info
 

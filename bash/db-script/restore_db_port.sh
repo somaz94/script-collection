@@ -17,7 +17,7 @@ do
         exit 1
     fi
     
-    # Check if the database exists (포트 옵션 추가)
+    # Check if the database exists (with port option)
     DB_EXISTS=$(mysql -h $DB_HOST -P $DB_PORT -u $DB_USER -p$DB_PASS -e "SHOW DATABASES LIKE '$DB_NAME';" | grep "$DB_NAME" > /dev/null; echo "$?")
     
     # If the database does not exist, create it
@@ -33,7 +33,7 @@ do
         fi
     fi
     
-    # Restore the database from the backup file (포트 옵션 추가)
+    # Restore the database from the backup file (with port option)
     mysql -h $DB_HOST -P $DB_PORT -u $DB_USER -p$DB_PASS $DB_NAME < $BACKUP_PATH/$BACKUP_FILE_NAME
     
     # Check if the restore was successful
