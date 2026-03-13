@@ -136,12 +136,12 @@ perform_pull() {
     fi
     
     # Attempt normal pull
-    if git pull 2>/tmp/git_pull_error_$; then
+    if git pull 2>/tmp/git_pull_error_$$; then
         echo -e "${GREEN}   ✅ Pull successful${NC}"
         return 0
     else
-        local error_msg=$(cat /tmp/git_pull_error_$ 2>/dev/null)
-        rm -f /tmp/git_pull_error_$
+        local error_msg=$(cat /tmp/git_pull_error_$$ 2>/dev/null)
+        rm -f /tmp/git_pull_error_$$
         
         # Check for conflicts
         if echo "$error_msg" | grep -q "CONFLICT\|Automatic merge failed"; then

@@ -114,9 +114,40 @@ def install_cudnn():
         os.remove('cudnn.tar.xz')
         shutil.rmtree('./cudnn')
 
+def install_packages():
+    """Install required system packages for GPU setup."""
+    print("Installing required packages...")
+    subprocess.run(['sudo', 'apt-get', 'update'])
+    subprocess.run(['sudo', 'apt-get', 'install', '-y',
+                     'build-essential', 'software-properties-common',
+                     'nfs-common', 'wget', 'curl'])
+
+def check_network_and_mount():
+    """Check network connectivity and mount NFS share.
+
+    This function:
+    - Pings the NFS server to verify network connectivity
+    - Creates the mount point directory if needed
+    - Mounts the NFS share if not already mounted
+    """
+    print(f"Checking network connectivity to {nfs_server_ip}...")
+    result = subprocess.run(['ping', '-c', '1', nfs_server_ip],
+                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    if result.returncode != 0:
+        print(f"Cannot reach NFS server at {nfs_server_ip}")
+        return
+
+    if not os.path.ismount(mount_point):
+        print(f"Mounting NFS share {nfs_server_ip}:{nfs_share_path} to {mount_point}...")
+        os.makedirs(mount_point, exist_ok=True)
+        subprocess.run(['sudo', 'mount', '-t', 'nfs',
+                        f'{nfs_server_ip}:{nfs_share_path}', mount_point])
+    else:
+        print(f"NFS share already mounted at {mount_point}")
+
 def main():
     """Main function to install packages and configure settings.
-    
+
     This function orchestrates the entire setup process:
     1. Installs required packages
     2. Checks network and mounts NFS

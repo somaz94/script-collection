@@ -14,7 +14,8 @@ cat /dev/null > load-image_list
 TARS=$(ls *.tar)
 for TAR in ${TARS}
 do
-    sudo docker load < ${TAR} | grep -i 'loaded image' | awk '{print $3}' >> load-image_listdone
+    sudo docker load < ${TAR} | grep -i 'loaded image' | awk '{print $3}' >> load-image_list
+done
 
 # Image Tag, Push, Clean
 for IMAGE in `cat load-image_list`
