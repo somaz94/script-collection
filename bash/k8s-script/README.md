@@ -56,6 +56,39 @@ Ensure the script is run as a user with sufficient permissions to renew certific
 - Make sure the script has execute permissions. Grant them using: chmod +x k8s_certs_renew.sh.
 - Ensure you backup any critical data and configurations before running the script.
 
+<br/>
 
+## 3. Kubespray Management Scripts
+
+<br/>
+
+### Description
+Scripts for managing Kubernetes clusters deployed with Kubespray. Includes version checking, upgrade automation, and post-upgrade health verification.
+
+<br/>
+
+### Scripts
+- `kubespray/config.env` — Shared configuration (connection settings, paths)
+- `kubespray/check-version.sh` — Version check, compatibility matrix, inventory sync
+- `kubespray/upgrade-kubespray.sh` — Kubespray tag switch with config diff and backup
+- `kubespray/post-upgrade-check.sh` — Post-upgrade health check (nodes, pods, certs, etcd, DNS, containerd)
+
+<br/>
+
+### Usage
+```bash
+cd kubespray
+
+# Edit config first
+vi config.env
+
+# Check versions
+./check-version.sh
+
+# Post-upgrade verification
+./post-upgrade-check.sh
+```
+
+See [kubespray/README.md](kubespray/README.md) for detailed usage.
 
 
