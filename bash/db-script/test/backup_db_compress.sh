@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Define variables
-DB_HOST="10.10.10.50" 
+DB_HOST="192.0.2.50" 
 DB_PORT="30736" 
 DB_USER="somaz"
 DB_PASS="somaz"
