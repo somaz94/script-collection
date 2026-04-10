@@ -10,25 +10,24 @@
 # SVN_AUTHZ_FILE: Path to SVN authorization file
 # SVN_PASSWD_FILE: Path to SVN password file
 # SVN_PASSWORD: Default password for new SVN users
-SVN_SERVER_IP=""
-SVN_SERVER_USER=""
-SVN_SERVER_PASSWORD=""
-DOCKER_CONTAINER=""
-SVN_CONF_PATH=""
+SVN_SERVER_IP="192.0.2.10"
+SVN_SERVER_USER="user"
+SVN_SERVER_PASSWORD="CHANGE_ME"
+DOCKER_CONTAINER="project_m_svn"
+SVN_CONF_PATH="/data/svn/conf"
 SVN_AUTHZ_FILE="$SVN_CONF_PATH/authz"
 SVN_PASSWD_FILE="$SVN_CONF_PATH/passwd"
-SVN_PASSWORD=""
+SVN_PASSWORD="CHANGE_ME"
 
 # List of users to be created
 # Add or remove usernames as needed
 USERNAMES=(
-  test2
-  test3
+  jmpark
 )
 
 # Prerequisites Check
 # -----------------
-# Verify that sshpass is installed
+# Verify sshpass installation
 # Required for automated SSH authentication
 if ! command -v sshpass &> /dev/null; then
   echo "✗ sshpass is not installed. Please install it first."
@@ -41,7 +40,7 @@ fi
 # Server Connection Check
 # ---------------------
 # Verify SSH connection to SVN server
-# Ensures the script can communicate with the server
+# Ensures we can communicate with the server
 echo "▸ Checking connection to SVN server..."
 export SSHPASS=$SVN_SERVER_PASSWORD
 if ! sshpass -e ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5 $SVN_SERVER_USER@$SVN_SERVER_IP "echo '✔ SSH connection successful'" &> /dev/null; then
@@ -52,7 +51,7 @@ echo "✔ Successfully connected to SVN server"
 
 # Docker Container Check
 # --------------------
-# Verify that the SVN Docker container is running
+# Verify SVN Docker container is running
 # Required for SVN operations
 echo "▸ Checking Docker container..."
 DOCKER_RUNNING=$(sshpass -e ssh -o StrictHostKeyChecking=no $SVN_SERVER_USER@$SVN_SERVER_IP "docker ps | grep $DOCKER_CONTAINER || echo 'not running'")
@@ -64,13 +63,9 @@ echo "✔ Docker container $DOCKER_CONTAINER is running"
 
 # Function: Add User to SVN
 # ------------------------
-# Adds a user to SVN configuration files (authz and passwd)
+# Adds a user to SVN configuration files
 # Parameters:
 #   $1: Username to add
-# Returns:
-#   0: Success
-#   1: Failure
-#   2: User already exists
 add_user_to_svn() {
   local USERNAME=$1
   local USER_WAS_ADDED=false
@@ -82,7 +77,7 @@ add_user_to_svn() {
   CHECK_RESULT=$(sshpass -e ssh -o StrictHostKeyChecking=no $SVN_SERVER_USER@$SVN_SERVER_IP "
     echo '✔ SSH connection successful'
     
-    # Check user existence in both files
+    # Check user existence in actual files
     AUTHZ_EXISTS=\$(docker exec $DOCKER_CONTAINER bash -c \"grep -q \\\"^$USERNAME=\\\" $SVN_AUTHZ_FILE && echo true || echo false\")
     PASSWD_EXISTS=\$(docker exec $DOCKER_CONTAINER bash -c \"grep -q \\\"^$USERNAME=\\\" $SVN_PASSWD_FILE && echo true || echo false\")
     
@@ -106,7 +101,7 @@ add_user_to_svn() {
   
   echo "▸ User does not exist in both files, proceeding with adding..."
   
-  # Add user to SVN configuration
+  # Modify SVN configuration files
   export SSHPASS=$SVN_SERVER_PASSWORD
   MODIFY_RESULT=$(sshpass -e ssh -o StrictHostKeyChecking=no $SVN_SERVER_USER@$SVN_SERVER_IP "
     echo '✔ SSH connection successful'
@@ -115,7 +110,7 @@ add_user_to_svn() {
     USER_MODIFIED=\$(docker exec $DOCKER_CONTAINER bash -c \"
       cd $SVN_CONF_PATH
       
-      # Check if user exists in either file
+      # Check if user exists in both files
       AUTH_EXISTS=false
       PASSWD_EXISTS=false
       MODIFIED=false
@@ -141,9 +136,10 @@ add_user_to_svn() {
         # Create backup
         cp $SVN_AUTHZ_FILE ${SVN_AUTHZ_FILE}.bak
         
-        # Add user with read-write permissions
+        # Add user to authz file
         echo \\\"$USERNAME=rw\\\" >> $SVN_AUTHZ_FILE
         
+        # Verify changes
         echo \\\"Added user to SVN authz file with read-write permissions\\\"
         MODIFIED=true
       fi
@@ -153,9 +149,10 @@ add_user_to_svn() {
         # Create backup
         cp $SVN_PASSWD_FILE ${SVN_PASSWD_FILE}.bak
         
-        # Add user with password
+        # Add user to passwd file
         echo \\\"$USERNAME=$SVN_PASSWORD\\\" >> $SVN_PASSWD_FILE
         
+        # Verify changes
         echo \\\"Added user to SVN passwd file\\\"
         MODIFIED=true
       fi
@@ -189,7 +186,7 @@ add_user_to_svn() {
   echo "Modify result exit code: $?"
   echo "Modify result output: $MODIFY_RESULT"
   
-  # Check operation result
+  # Check command execution result
   RESULT=$?
   if [ "$RESULT" -eq 0 ]; then
     echo "✔ Successfully added or updated user '$USERNAME' in SVN configuration"
@@ -206,13 +203,10 @@ add_user_to_svn() {
 # Function: Restart SVN Service
 # ---------------------------
 # Restarts the SVN service to apply configuration changes
-# Returns:
-#   0: Success
-#   1: Failure
 restart_svn_service() {
   echo "↻ Restarting SVN service..."
   
-  # Execute restart command via SSH
+  # Execute SSH command
   export SSHPASS=$SVN_SERVER_PASSWORD
   sshpass -e ssh -o StrictHostKeyChecking=no $SVN_SERVER_USER@$SVN_SERVER_IP "
     echo '✔ SSH connection successful'
@@ -245,7 +239,7 @@ restart_svn_service() {
     '
   "
   
-  # Check restart result
+  # Check command execution result
   RESULT=$?
   if [ "$RESULT" -eq 0 ]; then
     echo "✔ Successfully restarted SVN service"
@@ -261,7 +255,7 @@ echo "▸ Starting SVN user configuration..."
 
 # Process Users
 # ------------
-# Add each user in the USERNAMES array
+# Add each user and track if any changes were made
 USER_ADDED=false
 for USERNAME in "${USERNAMES[@]}"; do
   echo "----------------------------------------"
@@ -284,9 +278,9 @@ for USERNAME in "${USERNAMES[@]}"; do
   echo "----------------------------------------"
 done
 
-# Service Restart
-# -------------
-# Restart SVN service only if changes were made
+# Restart Service if Needed
+# -----------------------
+# Only restart SVN service if changes were made
 if [ "$USER_ADDED" = "true" ]; then
   echo "▸ Changes detected, restarting SVN service..."
   restart_svn_service

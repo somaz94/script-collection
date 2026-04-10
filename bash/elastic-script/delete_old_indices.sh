@@ -6,8 +6,8 @@
 
 # Elasticsearch connection settings
 ELASTIC_USER="elastic"
-ELASTIC_PASSWORD=""
-ELASTIC_HOST=""
+ELASTIC_PASSWORD="CHANGE_ME"
+ELASTIC_HOST="http://elasticsearch.example.com"
 
 # Index names to clean (array)
 INDEX_NAMES=()
@@ -135,7 +135,7 @@ if [ "$CHECK_SETTINGS" = true ]; then
     fi
 
     echo "=========================================="
-    echo "📋 Index Settings Check"
+    echo "▸ Index Settings Check"
     echo "=========================================="
     for INDEX in "${INDEX_NAMES[@]}"; do
         echo ""
@@ -192,7 +192,7 @@ if [ -n "$UPDATE_LIMIT" ]; then
     fi
 
     echo "=========================================="
-    echo "⚙️  Index Settings Update"
+    echo "▸  Index Settings Update"
     echo "=========================================="
     echo "Target indices:"
     for INDEX in "${INDEX_NAMES[@]}"; do
@@ -254,7 +254,7 @@ if [ "$DELETE_INDEX" = true ]; then
     
     # Display indices to be deleted
     echo "=========================================="
-    echo "⚠️  INDEX DELETION OPERATION"
+    echo "▲  INDEX DELETION OPERATION"
     echo "=========================================="
     echo "The following indices will be completely deleted:"
     echo ""
@@ -265,7 +265,7 @@ if [ "$DELETE_INDEX" = true ]; then
     echo "Total: ${#INDEX_NAMES[@]} index(es) will be deleted."
     echo "=========================================="
     echo ""
-    echo "⚠️  WARNING: This operation is irreversible!"
+    echo "▲  WARNING: This operation is irreversible!"
     read -p "Are you sure you want to delete these indices? (Type 'DELETE' to confirm): " -r
     echo
     if [ "$REPLY" != "DELETE" ]; then

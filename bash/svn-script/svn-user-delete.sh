@@ -9,24 +9,23 @@
 # SVN_CONF_PATH: Path to SVN configuration directory
 # SVN_AUTHZ_FILE: Path to SVN authorization file
 # SVN_PASSWD_FILE: Path to SVN password file
-SVN_SERVER_IP=""
-SVN_SERVER_USER=""
-SVN_SERVER_PASSWORD=""
-DOCKER_CONTAINER=""
-SVN_CONF_PATH=""
+SVN_SERVER_IP="192.0.2.10"
+SVN_SERVER_USER="user"
+SVN_SERVER_PASSWORD="CHANGE_ME"
+DOCKER_CONTAINER="project_m_svn"
+SVN_CONF_PATH="/data/svn/conf"
 SVN_AUTHZ_FILE="$SVN_CONF_PATH/authz"
 SVN_PASSWD_FILE="$SVN_CONF_PATH/passwd"
 
 # List of users to be deleted
 # Add or remove usernames as needed
 USERNAMES=(
-  test2
-  test3
+  ghdrms1220
 )
 
 # Prerequisites Check
 # -----------------
-# Verify that sshpass is installed
+# Verify sshpass installation
 # Required for automated SSH authentication
 if ! command -v sshpass &> /dev/null; then
   echo "✗ sshpass is not installed. Please install it first."
@@ -39,7 +38,7 @@ fi
 # Server Connection Check
 # ---------------------
 # Verify SSH connection to SVN server
-# Ensures the script can communicate with the server
+# Ensures we can communicate with the server
 echo "▸ Checking connection to SVN server..."
 export SSHPASS=$SVN_SERVER_PASSWORD
 if ! sshpass -e ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5 $SVN_SERVER_USER@$SVN_SERVER_IP "echo '✔ SSH connection successful'" &> /dev/null; then
@@ -50,7 +49,7 @@ echo "✔ Successfully connected to SVN server"
 
 # Docker Container Check
 # --------------------
-# Verify that the SVN Docker container is running
+# Verify SVN Docker container is running
 # Required for SVN operations
 echo "▸ Checking Docker container..."
 DOCKER_RUNNING=$(sshpass -e ssh -o StrictHostKeyChecking=no $SVN_SERVER_USER@$SVN_SERVER_IP "docker ps | grep $DOCKER_CONTAINER || echo 'not running'")
@@ -62,13 +61,9 @@ echo "✔ Docker container $DOCKER_CONTAINER is running"
 
 # Function: Delete User from SVN
 # ----------------------------
-# Removes a user from SVN configuration files (authz and passwd)
+# Removes a user from SVN configuration files
 # Parameters:
 #   $1: Username to delete
-# Returns:
-#   0: Success
-#   1: Failure
-#   2: User doesn't exist
 delete_user_from_svn() {
   local USERNAME=$1
   
@@ -107,7 +102,7 @@ delete_user_from_svn() {
   
   echo "▸ Deleting user '$USERNAME' from SVN..."
   
-  # Delete user from SVN configuration
+  # Delete user from configuration files
   export SSHPASS=$SVN_SERVER_PASSWORD
   DELETED=$(sshpass -e ssh -o StrictHostKeyChecking=no $SVN_SERVER_USER@$SVN_SERVER_IP '
     USERNAME='$USERNAME'
@@ -191,13 +186,10 @@ delete_user_from_svn() {
 # Function: Restart SVN Service
 # ---------------------------
 # Restarts the SVN service to apply configuration changes
-# Returns:
-#   0: Success
-#   1: Failure
 restart_svn_service() {
   echo "↻ Restarting SVN service..."
   
-  # Execute restart command via SSH
+  # Execute SSH command
   export SSHPASS=$SVN_SERVER_PASSWORD
   sshpass -e ssh -o StrictHostKeyChecking=no $SVN_SERVER_USER@$SVN_SERVER_IP '
     DOCKER_CONTAINER='$DOCKER_CONTAINER'
@@ -236,7 +228,7 @@ restart_svn_service() {
     exit $?
   '
   
-  # Check restart result
+  # Check command execution result
   RESULT=$?
   if [ "$RESULT" -eq 0 ]; then
     echo "✔ Successfully restarted SVN service"
@@ -252,7 +244,7 @@ echo "▸ Starting SVN user deletion..."
 
 # Process Users
 # ------------
-# Delete each user in the USERNAMES array
+# Delete each user and track if any changes were made
 USER_DELETED=false
 for USERNAME in "${USERNAMES[@]}"; do
   echo "----------------------------------------"
@@ -275,9 +267,9 @@ for USERNAME in "${USERNAMES[@]}"; do
   echo "----------------------------------------"
 done
 
-# Service Restart
-# -------------
-# Restart SVN service only if changes were made
+# Restart Service if Needed
+# -----------------------
+# Only restart SVN service if changes were made
 if [ "$USER_DELETED" = "true" ]; then
   echo "▸ Changes detected, restarting SVN service..."
   restart_svn_service

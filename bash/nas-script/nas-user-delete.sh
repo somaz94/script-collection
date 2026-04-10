@@ -6,12 +6,12 @@
 # NAS_URL: Base URL for NAS API access
 # ADMIN_USERNAME: Administrator username for NAS access
 # ADMIN_PASSWORD: Administrator password for NAS access
-# GROUP_NAME: Group name for verification purposes
-NAS_IP=""
+# GROUP_NAME: Group name for user verification
+NAS_IP="192.0.2.5"
 NAS_URL="http://$NAS_IP:5000"
-ADMIN_USERNAME=""
-ADMIN_PASSWORD=""
-GROUP_NAME=""
+ADMIN_USERNAME="user"
+ADMIN_PASSWORD="CHANGE_ME"
+GROUP_NAME="ConcritMember"
 
 # List of users to be deleted
 # Add or remove usernames as needed
@@ -30,7 +30,7 @@ echo "API Info Response: $API_INFO"
 # Authentication - Core Session
 # ----------------------------
 # Authenticate with NAS for core operations
-# This session is required for user management operations
+# This session is required for user management
 echo "▸ Attempting to authenticate with NAS (Core session)..."
 CORE_AUTH_RESPONSE=$(curl -s -X POST "$NAS_URL/webapi/entry.cgi" \
   --data-urlencode "api=SYNO.API.Auth" \
@@ -81,7 +81,7 @@ for USERNAME in "${USERNAMES[@]}"; do
   echo "▸  Deleting user: $USERNAME"
   
   # Delete user
-  # Removes the user account from the NAS
+  # Removes the user account from the NAS system
   DELETE_RESPONSE=$(curl -s -X POST "$NAS_URL/webapi/entry.cgi" \
     --data-urlencode "api=SYNO.Core.User" \
     --data-urlencode "version=1" \

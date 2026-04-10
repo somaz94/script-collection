@@ -16,7 +16,7 @@ fi
 # k8s_user: Kubernetes admin user (defaults to 'somaz' if not set)
 # backup_dir: Directory for certificate backups
 current_date=$(date +'%Y-%m-%d')
-k8s_user=${K8S_USER:-somaz}  # Use environment variable with default value
+k8s_user=${K8S_USER:-concrit}  # Use environment variable with default value
 backup_dir="/root/${current_date}-kubernetes-pki-backup"
 
 # Certificate Expiration Check
@@ -108,7 +108,7 @@ kubectl get pods --all-namespaces
 echo "Updating admin configuration..."
 cp /etc/kubernetes/admin.conf /root/.kube/config
 if [[ -d "/home/${k8s_user}" ]]; then
-    cp /etc/kubernetes/admin.conf "/home/${k8s_user}/.kube/config" || { 
+    cp /etc/kubernetes/admin.conf "/home/${k8s_user}/.kube/config" || {
         echo "Failed to copy admin.conf to user ${k8s_user}"
         exit 1
     }

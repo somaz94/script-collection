@@ -7,24 +7,32 @@
 # DEFAULT_PASSWORD: Initial password for new users
 # EMAIL_DOMAIN: Domain for user email addresses
 # GROUP_NAME: Target group name for user membership
-GITLAB_URL=""
-PRIVATE_TOKEN=""
-DEFAULT_PASSWORD=""
-EMAIL_DOMAIN=""
-GROUP_NAME=""
+GITLAB_URL="http://gitlab.example.com"
+PRIVATE_TOKEN="<your-gitlab-token>"
+DEFAULT_PASSWORD="CHANGE_ME"
+EMAIL_DOMAIN="example.com"
+GROUP_NAME="server"
 
 # List of users to be created
 # Add or remove usernames as needed
 USERNAMES=(
-  somaz
-  somaz2
+  sunddu
 )
 
 # Group Information Retrieval
 # -------------------------
 # Get the group ID using the group name
 # This ID is required for adding users to the group
-GROUP_ID=$(curl -s --header "PRIVATE-TOKEN: $PRIVATE_TOKEN" "$GITLAB_URL/api/v4/groups?search=$GROUP_NAME" | jq ".[0].id")
+GROUP_RESPONSE=$(curl -s --header "PRIVATE-TOKEN: $PRIVATE_TOKEN" "$GITLAB_URL/api/v4/groups?search=$GROUP_NAME")
+GROUP_ID=$(echo "$GROUP_RESPONSE" | jq ".[0].id")
+
+# Check for API errors or if group not found
+if [[ "$GROUP_ID" == "null" || -z "$GROUP_ID" ]]; then
+  echo "✗ Error: Could not retrieve Group ID for '$GROUP_NAME'."
+  echo "   GitLab API Response: $GROUP_RESPONSE"
+  echo "----------------------------------------"
+  exit 1
+fi
 
 echo "✔ Found Group '$GROUP_NAME' with ID: $GROUP_ID"
 echo "----------------------------------------"
@@ -40,11 +48,20 @@ for USERNAME in "${USERNAMES[@]}"; do
 
   # Check for existing user
   # Prevents duplicate user creation
-  EXISTING_USER=$(curl -s --header "PRIVATE-TOKEN: $PRIVATE_TOKEN" "$GITLAB_URL/api/v4/users?username=$USERNAME" | jq '.[0]')
-
+  EXISTING_USER_RESPONSE=$(curl -s --header "PRIVATE-TOKEN: $PRIVATE_TOKEN" "$GITLAB_URL/api/v4/users?username=$USERNAME")
+  
+  # jq returns "null" if user doesn't exist, or an empty string if there's an API error.
+  EXISTING_USER_ID=$(echo "$EXISTING_USER_RESPONSE" | jq '.[0].id')
+  
   # Skip if user already exists
-  if [ "$EXISTING_USER" != "null" ]; then
-    echo "▲  User '$USERNAME' already exists!"
+  if [[ "$EXISTING_USER_ID" != "null" && -n "$EXISTING_USER_ID" ]]; then
+    echo "▲  User '$USERNAME' already exists with ID: $EXISTING_USER_ID"
+    echo "----------------------------------------"
+    continue
+  elif [[ "$EXISTING_USER_ID" != "null" ]]; then
+    # This case handles API errors where the response is not the expected array.
+    echo "✗ Error: Failed to check for user '$USERNAME' due to an API error."
+    echo "   GitLab API Response: $EXISTING_USER_RESPONSE"
     echo "----------------------------------------"
     continue
   fi
@@ -83,4 +100,3 @@ for USERNAME in "${USERNAMES[@]}"; do
   echo ""
   echo "----------------------------------------"
 done
-

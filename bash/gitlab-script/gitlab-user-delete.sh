@@ -5,15 +5,14 @@
 # GITLAB_URL: Base URL of your GitLab instance
 # PRIVATE_TOKEN: GitLab API access token with admin privileges
 # GROUP_NAME: Target group name for user removal
-GITLAB_URL=""
-PRIVATE_TOKEN=""
-GROUP_NAME=""
+GITLAB_URL="http://gitlab.example.com"
+PRIVATE_TOKEN="<your-gitlab-token>"
+GROUP_NAME="gamedesign"
 
 # List of users to be deleted
 # Add or remove usernames as needed
 USERNAMES=(
-  somaz
-  somaz2
+  test
 )
 
 # Group Information Retrieval
@@ -39,7 +38,7 @@ for USERNAME in "${USERNAMES[@]}"; do
     echo "----------------------------------------"
     continue
   fi
-  
+
   # Extract User ID
   # Required for both group removal and user deletion
   USER_ID=$(echo $EXISTING_USER | jq '.id')

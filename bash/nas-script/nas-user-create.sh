@@ -10,19 +10,19 @@
 # GROUP_NAME: Default group to add users to
 # DEFAULT_PASSWORD: Initial password for new users
 # DESCRIPTION: Default description for new users with timestamp
-NAS_IP=""
+NAS_IP="192.0.2.5"
 NAS_URL="http://$NAS_IP:5000"
-ADMIN_USERNAME=""
-ADMIN_PASSWORD=""
-EMAIL_DOMAIN=""
-GROUP_NAME=""
-DEFAULT_PASSWORD=""
-DESCRIPTION="Created by script on $(date '+%Y-%m-%d %H:%M:%S') Test_User"
+ADMIN_USERNAME="user"
+ADMIN_PASSWORD="CHANGE_ME"
+EMAIL_DOMAIN="example.com"
+GROUP_NAME="ConcritMember"
+DEFAULT_PASSWORD="CHANGE_ME"
+DESCRIPTION="server_user"
 
 # List of users to be created
 # Add or remove usernames as needed
 USERNAMES=(
-  test2
+  jmpark
 )
 
 # Initialize API Information
