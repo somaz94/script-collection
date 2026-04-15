@@ -21,7 +21,7 @@ jobs:
         uses: somaz94/multi-git-mirror@v1
         with:
           targets: |
-            gitlab::https://gitlab.com/example-backup/script-collection.git
+            gitlab::https://gitlab.com/backup6695808/script-collection.git
           gitlab_token: ${{ secrets.GITLAB_TOKEN }}
           mirror_branches: 'all'
           mirror_tags: 'true'
