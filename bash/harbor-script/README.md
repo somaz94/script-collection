@@ -47,7 +47,7 @@ This script helps manage Docker images in Harbor repositories by automatically d
 | `--dry-run` | Don't actually delete images, just print what would be deleted |
 | `--auto-confirm` | Skip confirmation and automatically delete images |
 | `-k, --keep N` | Keep the newest N images (default: 100) |
-| `-p, --project NAME` | Harbor project name (default: projectm) |
+| `-p, --project NAME` | Harbor project name (default: example-project) |
 | `-r, --repo NAME` | Repository name (e.g., game/cache). Can be specified multiple times |
 | `-r all` | Process all repositories in the project |
 | `-b, --batch-size N` | Number of images to delete in parallel (default: 10) |
@@ -101,7 +101,7 @@ For automated cleanup, you can schedule the script with cron:
 
 ```bash
 # Example: Run cleanup every day at 2 AM with auto-confirmation
-0 2 * * * /path/to/harbor-image-cleanup.sh -p projectm -r all -k 50 --auto-confirm > /var/log/harbor-cleanup.log 2>&1
+0 2 * * * /path/to/harbor-image-cleanup.sh -p example-project -r all -k 50 --auto-confirm > /var/log/harbor-cleanup.log 2>&1
 ```
 
 <br/>

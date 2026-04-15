@@ -163,8 +163,8 @@ def main():
 
     # List of users to be created
     USERNAMES = [
-        "somaz",
-        "somaz2"
+        "user1",
+        "user2"
     ]
 
     # Validate required configuration

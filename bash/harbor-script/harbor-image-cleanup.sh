@@ -29,8 +29,8 @@ show_help() {
     echo -e "  --auto-confirm          Automatically confirm image deletion without prompts"
     echo -e "  -y, --yes               Automatically answer 'yes' to confirmation prompts (immediate deletion)"
     echo -e "  -k, --keep N            Keep the newest N images (default: 100)"
-    echo -e "  -p, --project NAME      Harbor project name (default: projectm)"
-    echo -e "  -r, --repo NAME         Repository name (e.g., projectm). Can be specified multiple times."
+    echo -e "  -p, --project NAME      Harbor project name (default: example-project)"
+    echo -e "  -r, --repo NAME         Repository name (e.g., example-project). Can be specified multiple times."
     echo -e "                          Use 'all' to process all repositories in the project."
     echo -e "  -b, --batch-size N      Number of images to delete in parallel (default: 10)"
     echo -e "  --stats PROJECT         Show artifact counts by repository for a specific project"
@@ -40,7 +40,7 @@ show_help() {
     echo -e "  $0 -p <project> -r <repository1> -r <repository2> -k 20 --auto-confirm"
     echo -e "  $0 -p <project> -r all -k 50"
     echo -e "  $0 -p <project> -r <repository> -k 50 -y"
-    echo -e "  $0 --stats projectm"
+    echo -e "  $0 --stats example-project"
     echo ""
 }
 
@@ -117,7 +117,7 @@ parse_arguments() {
         if [[ -z "$STATS_PROJECT" ]]; then
             echo -e "${RED}Error: --stats option requires a project name.${NC}" >&2
             echo -e "${YELLOW}Usage: $0 --stats <project_name>${NC}" >&2
-            echo -e "${CYAN}Example: $0 --stats projectm${NC}" >&2
+            echo -e "${CYAN}Example: $0 --stats example-project${NC}" >&2
             exit 1
         fi
         return 0

@@ -20,7 +20,7 @@ echo "daily-csv-"$(date +"%Y-%m-%d_%Hh_%Mm.txt") > /tmp/daily-checklist-D1
 echo $(date +"%Y-%m") > /tmp/daily-checklist-D2
 DATE1=$(cat /tmp/daily-checklist-D1)
 DATE2=$(cat /tmp/daily-checklist-D2)
-scpath="/home/somaz/monthly_maintenance/"
+scpath="/home/user/monthly_maintenance/"
 
 # System Information Collection
 # --------------------------
@@ -31,7 +31,7 @@ kubenss=$(/usr/local/bin/kubectl get ns | awk 'NR > 1 {print $1}')
 # Environment Configuration
 # ----------------------
 # Load server list and set Ceph master node
-servlist=$(cat /home/somaz/monthly_maintenance/serverlist.txt)
+servlist=$(cat /home/user/monthly_maintenance/serverlist.txt)
 cephmaster=r-ceph-farm-01
 
 # Directory Setup

@@ -16,8 +16,8 @@ import subprocess
 # Configuration Settings
 # -------------------
 # Define paths for monitoring, synchronization, and logging
-watch_dir = '/root/somaz'                    # Directory to monitor for changes
-sync_target_dir = '/data/local-somaz/'       # Target directory for synchronization
+watch_dir = '/root/user'                    # Directory to monitor for changes
+sync_target_dir = '/data/local-user/'       # Target directory for synchronization
 log_file_path = '/root/sync-script/sync.log' # Path for log file
 
 def log_message(message):

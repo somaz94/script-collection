@@ -16,7 +16,7 @@ fi
 # k8s_user: Kubernetes admin user (defaults to 'somaz' if not set)
 # backup_dir: Directory for certificate backups
 current_date=$(date +'%Y-%m-%d')
-k8s_user=${K8S_USER:-concrit}  # Use environment variable with default value
+k8s_user=${K8S_USER:-example}  # Use environment variable with default value
 backup_dir="/root/${current_date}-kubernetes-pki-backup"
 
 # Certificate Expiration Check

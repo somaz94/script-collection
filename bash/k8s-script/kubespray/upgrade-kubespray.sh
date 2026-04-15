@@ -16,7 +16,7 @@
 set -euo pipefail
 
 KUBESPRAY_DIR="${KUBESPRAY_DIR:-$HOME/kubespray}"
-INVENTORY_NAME="${INVENTORY_NAME:-concrit-cluster}"
+INVENTORY_NAME="${INVENTORY_NAME:-example-cluster}"
 INVENTORY_DIR="$KUBESPRAY_DIR/inventory/$INVENTORY_NAME"
 BACKUP_BASE="$KUBESPRAY_DIR/upgrade-backups"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
@@ -60,7 +60,7 @@ Options:
 
 Environment Variables:
   KUBESPRAY_DIR          Kubespray directory (default: ~/kubespray)
-  INVENTORY_NAME         Inventory name (default: concrit-cluster)
+  INVENTORY_NAME         Inventory name (default: example-cluster)
 
 Examples:
   $(basename "$0")                        # Interactive upgrade

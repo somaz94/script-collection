@@ -9,8 +9,8 @@
 DEFAULT_HARBOR_URL="harbor.example.com"           # Default Harbor registry URL
 DEFAULT_HARBOR_PROTOCOL="http"                   # Default protocol (http/https) for Harbor API
 DEFAULT_HARBOR_USER="admin"                      # Default Harbor admin username
-DEFAULT_HARBOR_PASS="concrit123!"                # Default Harbor admin password
-DEFAULT_PROJECT_NAME="projectm"                  # Default Harbor project name to clean up
+DEFAULT_HARBOR_PASS="exampleAdminPassword"                # Default Harbor admin password
+DEFAULT_PROJECT_NAME="example-project"                  # Default Harbor project name to clean up
 DEFAULT_IMAGES_TO_KEEP=100                       # Default number of newest images to keep
 DEFAULT_BATCH_SIZE=10                            # Default number of images to delete in parallel
 DEFAULT_DEBUG=false                              # Default debug mode setting (verbose logging when true)
@@ -34,7 +34,7 @@ show_help() {
     echo "  --auto-confirm          Skip confirmation and automatically delete images"
     echo "  -k, --keep N            Keep the newest N images (default: $DEFAULT_IMAGES_TO_KEEP)"
     echo "  -p, --project NAME      Harbor project name (default: $DEFAULT_PROJECT_NAME)"
-    echo "  -r, --repo NAME         Repository name (e.g., projectm). Can be specified multiple times."
+    echo "  -r, --repo NAME         Repository name (e.g., example-project). Can be specified multiple times."
     echo "                          Use 'all' to process all repositories in the project."
     echo "  -b, --batch-size N      Number of images to delete in parallel (default: $DEFAULT_BATCH_SIZE)"
     echo ""

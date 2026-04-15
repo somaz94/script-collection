@@ -2,7 +2,7 @@
 ##################################
 # GLOVAL VARIABLES
 VERSION="0.2"
-AUTHOR="jwizard"
+AUTHOR="example-author"
 TODAY_YMD_HIS=`date "+%Y.%m.%d %H:%I:%S"`
 TODAY=`date "+%m%d"`
 NAMESPACE=somaz

@@ -15,16 +15,16 @@ from datetime import datetime
 # Configuration Variables
 # ---------------------
 # Directory and file paths for monitoring and logging
-watch_dir = '/root/somaz'                    # Directory to monitor for changes
-sync_target_dir = '/data/local-somaz/'       # Target directory for synchronization
+watch_dir = '/root/user'                    # Directory to monitor for changes
+sync_target_dir = '/data/local-user/'       # Target directory for synchronization
 log_file_path = '/root/sync-script/sync.log' # Path for log file
 
 # NFS Configuration
 # ---------------
 # Network File System settings for mounting shared storage
-nfs_server_ip = '10.77.101.25'              # NFS server IP address
+nfs_server_ip = '192.0.2.25'              # NFS server IP address
 nfs_share_path = '/nfs/application'         # NFS share path on server
-mount_point = '/home/somaz/application'     # Local mount point
+mount_point = '/home/user/application'     # Local mount point
 
 # NVIDIA Driver Configuration
 # ------------------------

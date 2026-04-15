@@ -18,21 +18,21 @@ fi
 # Network Connectivity Check
 # ------------------------
 # Wait for network connectivity to NFS server
-while ! ping -c 1 -W 1 10.77.101.25; do
-    echo "Waiting for 10.77.101.25 - network interface might be down..."
+while ! ping -c 1 -W 1 192.0.2.25; do
+    echo "Waiting for 192.0.2.25 - network interface might be down..."
     sleep 1
 done
 
 # NFS Mount Configuration
 # ---------------------
 # Mount NFS share if not already mounted
-if ! mount | grep -q '/home/somaz/application'; then
+if ! mount | grep -q '/home/user/application'; then
     echo "Mounting NFS share..."
-    mkdir -p /home/somaz/application
-    sudo mount -t nfs 10.77.101.25:/nfs/application /home/somaz/application
+    mkdir -p /home/user/application
+    sudo mount -t nfs 192.0.2.25:/nfs/application /home/user/application
     # Add to fstab for persistent mounting
-    if ! grep -q '10.77.101.25:/nfs/application /home/somaz/application nfs' /etc/fstab; then
-        echo "10.77.101.25:/nfs/application /home/somaz/application nfs defaults 0 0" | sudo tee -a /etc/fstab
+    if ! grep -q '192.0.2.25:/nfs/application /home/user/application nfs' /etc/fstab; then
+        echo "192.0.2.25:/nfs/application /home/user/application nfs defaults 0 0" | sudo tee -a /etc/fstab
     fi
 else
     echo "NFS share is already mounted."
@@ -59,8 +59,8 @@ if ! nvcc --version > /dev/null 2>&1; then
     sudo add-apt-repository "deb https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/ /" -y
     sudo apt-get update -y
     sudo apt-get install -y cuda-11-8 cuda-toolkit-11-8 
-    echo '##cuda##' >> /home/somaz/.bashrc
-    echo 'export PATH=/usr/local/cuda/bin:$PATH' >> /home/somaz/.bashrc
+    echo '##cuda##' >> /home/user/.bashrc
+    echo 'export PATH=/usr/local/cuda/bin:$PATH' >> /home/user/.bashrc
 fi
 
 # cuDNN Installation
@@ -87,18 +87,18 @@ export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
 # System Verification
 # ----------------
 # Check and record GPU and CUDA versions
-echo "Checking GPU version..." > /home/somaz/application/gpu_check.txt
-sudo nvidia-smi >> /home/somaz/application/gpu_check.txt
-echo "" >> /home/somaz/application/gpu_check.txt
+echo "Checking GPU version..." > /home/user/application/gpu_check.txt
+sudo nvidia-smi >> /home/user/application/gpu_check.txt
+echo "" >> /home/user/application/gpu_check.txt
 
-echo "Checking CUDA version..." >> /home/somaz/application/gpu_check.txt
-/usr/local/cuda/bin/nvcc --version >> /home/somaz/application/gpu_check.txt
-echo "" >> /home/somaz/application/gpu_check.txt
+echo "Checking CUDA version..." >> /home/user/application/gpu_check.txt
+/usr/local/cuda/bin/nvcc --version >> /home/user/application/gpu_check.txt
+echo "" >> /home/user/application/gpu_check.txt
 
 # cuDNN Verification
 # ----------------
 # Create and compile a test program to verify cuDNN installation
-cat <<'EOF_SCRIPT' > /home/somaz/application/cudnn_test.cpp
+cat <<'EOF_SCRIPT' > /home/user/application/cudnn_test.cpp
 #include <cudnn.h>
 #include <iostream>
 
@@ -112,14 +112,14 @@ int main() {
 EOF_SCRIPT
 
 # Compile and run cuDNN test
-nvcc -o /home/somaz/application/cudnn_test /home/somaz/application/cudnn_test.cpp -lcudnn
+nvcc -o /home/user/application/cudnn_test /home/user/application/cudnn_test.cpp -lcudnn
 
 # Verify cuDNN test results
-echo "Checking if the compiled CuDNN test executable exists, then running it..." >> /home/somaz/application/gpu_check.txt
-if [ -f "/home/somaz/application/cudnn_test" ]; then
-    /home/somaz/application/cudnn_test >> /home/somaz/application/gpu_check.txt
+echo "Checking if the compiled CuDNN test executable exists, then running it..." >> /home/user/application/gpu_check.txt
+if [ -f "/home/user/application/cudnn_test" ]; then
+    /home/user/application/cudnn_test >> /home/user/application/gpu_check.txt
 else
-    echo "CuDNN test executable not found." >> /home/somaz/application/gpu_check.txt
+    echo "CuDNN test executable not found." >> /home/user/application/gpu_check.txt
 fi
 
 # Stable Diffusion Setup
@@ -128,7 +128,7 @@ fi
 echo "Starting Stable Diffusion WebUI instances..."
 
 # Navigate to Stable Diffusion WebUI directory
-cd /home/somaz/application/stable-diffusion-webui || exit
+cd /home/user/application/stable-diffusion-webui || exit
 
 # Calculate number of available GPUs
 gpu_count=$(nvidia-smi -L | wc -l)
@@ -140,11 +140,11 @@ start_port=7861
 for (( gpu=0; gpu<gpu_count; gpu++ ))
 do
     # Set log file for current instance
-    nohup_file="/home/somaz/application/stable-diffusion-webui/nohup_${start_port}.out"
+    nohup_file="/home/user/application/stable-diffusion-webui/nohup_${start_port}.out"
 
     # Launch WebUI instance with GPU-specific settings
     echo "Launching Stable Diffusion WebUI instance on GPU ${gpu} at port ${start_port}..."
-    sudo -u somaz sh -c "CUDA_VISIBLE_DEVICES=$gpu nohup ./webui.sh --listen --port $start_port > $nohup_file 2>&1 &"
+    sudo -u user sh -c "CUDA_VISIBLE_DEVICES=$gpu nohup ./webui.sh --listen --port $start_port > $nohup_file 2>&1 &"
 
     # Increment port number for next instance
     ((start_port++))

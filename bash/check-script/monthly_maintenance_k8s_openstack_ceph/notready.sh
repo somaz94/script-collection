@@ -3,7 +3,7 @@
 # Email Configuration
 # ----------------
 # Set the recipient email address for notifications
-recipient="somaz@gmail.com"
+recipient="admin@example.com"
 
 # Node Status Check
 # --------------
@@ -25,12 +25,12 @@ if [ "${STATE}" == "NotReady" ];then
     touch /$HOME/monthly_maintenance/send_mail
     
     # Record node information
-    echo "${hostname}" "${STATE}" >> /home/somaz/monthly_maintenance/send_mail
+    echo "${hostname}" "${STATE}" >> /home/user/monthly_maintenance/send_mail
     
     # Send email notification
     # Note: Commented out alternative email sending method
-    #echo "${STATE}" >> /home/somaz/monthly_maintenance/send_mail
-    #sudo cat /home/somaz/monthly_maintenance/send_mail | sudo /usr/sbin/sendmail -s "Node NotReady"  ${recipient}
+    #echo "${STATE}" >> /home/user/monthly_maintenance/send_mail
+    #sudo cat /home/user/monthly_maintenance/send_mail | sudo /usr/sbin/sendmail -s "Node NotReady"  ${recipient}
     sudo cat /$HOME/monthly_maintenance/send_mail | sudo mail -s "$(hostname) Node NotReady" ${recipient}
     
     # Cleanup

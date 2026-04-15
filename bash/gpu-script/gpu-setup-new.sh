@@ -3,9 +3,9 @@
 # Configuration Variables
 # ---------------------
 # NFS Configuration
-NFS_SERVER_IP="10.77.101.25"        # IP address of the NFS server
+NFS_SERVER_IP="192.0.2.25"        # IP address of the NFS server
 NFS_SHARE_PATH="/nfs/application"   # Path to the shared directory on NFS server
-MOUNT_POINT="/home/somaz/application" # Local mount point for NFS share
+MOUNT_POINT="/home/user/application" # Local mount point for NFS share
 
 # CUDA Configuration
 # ----------------

@@ -33,7 +33,7 @@ EXCLUDE_PATTERNS=(
     "**/.nfs*"
     
     # User-defined exclude patterns (add as needed)
-    # "projectm/logs/*.log"
+    # "example-project/logs/*.log"
     # "*/cache/*"
     # "*/tmp/*"
 )

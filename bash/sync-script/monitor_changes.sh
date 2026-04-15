@@ -1,10 +1,10 @@
 #!/bin/bash
 
 # Set the directory to be monitored
-watch_dir="/root/somaz"
+watch_dir="/root/user"
 
 # Target directory for synchronization
-sync_target_dir="/data/local-somaz/"
+sync_target_dir="/data/local-user/"
 
 # Path to the change handling script
 action_script="/root/sync-script/handle_change.sh"

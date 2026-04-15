@@ -120,8 +120,8 @@ show_stats_help() {
     echo -e "${CYAN}  show_stats_help${NC}                                - Show this help message"
     
     echo -e "\n${YELLOW}Usage Examples:${NC}"
-    echo -e "${GREEN}  # Show all repository statistics for projectm${NC}"
-    echo -e "  show_project_repositories_stats projectm"
+    echo -e "${GREEN}  # Show all repository statistics for example-project${NC}"
+    echo -e "  show_project_repositories_stats example-project"
     
     echo -e "\n${GREEN}  # Show all repository statistics for projecta${NC}"
     echo -e "  show_project_repositories_stats projecta"

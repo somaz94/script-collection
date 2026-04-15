@@ -181,7 +181,7 @@ check_dns() {
 
   echo ""
   # Test DNS from a pod
-  DNS_RESULT=$(kubectl run dns-test --image=busybox:1.36 --rm -i --restart=Never --timeout=30s -- nslookup kubernetes.default.svc.concrit-cluster.local 2>/dev/null || echo "DNS_FAILED")
+  DNS_RESULT=$(kubectl run dns-test --image=busybox:1.36 --rm -i --restart=Never --timeout=30s -- nslookup kubernetes.default.svc.example-cluster.local 2>/dev/null || echo "DNS_FAILED")
 
   if echo "$DNS_RESULT" | grep -q "Address" 2>/dev/null; then
     pass "DNS resolution working (kubernetes.default.svc)"
