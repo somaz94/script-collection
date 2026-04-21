@@ -7,6 +7,7 @@ Bulk-manage **Actions** and **Dependabot** secrets across all repositories in a 
 ## Features
 
 - **list** — View secrets for every repository at a glance
+- **add** — Add a single secret to Actions and auto-sync to Dependabot in one shot
 - **sync** — Copy Actions secrets to Dependabot secrets (with optional value injection)
 - **update** — Add or update a specific secret across all repositories
 - **delete** — Remove a specific secret from all repositories
@@ -76,7 +77,7 @@ export GITLAB_TOKEN='glpat-xxxxxxxxxxxx'
 export PAT_TOKEN='ghp_xxxxxxxxxxxx'
 export DOCKERHUB_TOKEN='dckr_pat_xxxxxxxxxxxx'
 
-python3 github_secrets_manager.py sync --org somaz94
+python3 github-secrets-manage.py sync --org somaz94
 ```
 
 <br/>
@@ -93,7 +94,7 @@ DOCKERHUB_TOKEN=dckr_pat_xxxxxxxxxxxx
 ```
 
 ```bash
-python3 github_secrets_manager.py sync --org somaz94 --env-file .secrets.env
+python3 github-secrets-manage.py sync --org somaz94 --env-file .secrets.env
 ```
 
 <br/>
@@ -103,7 +104,7 @@ python3 github_secrets_manager.py sync --org somaz94 --env-file .secrets.env
 ```bash
 export SECRET_VALUES='{"GITLAB_TOKEN":"glpat-xxx","PAT_TOKEN":"ghp_xxx"}'
 
-python3 github_secrets_manager.py sync --org somaz94
+python3 github-secrets-manage.py sync --org somaz94
 ```
 
 <br/>
@@ -116,11 +117,39 @@ python3 github_secrets_manager.py sync --org somaz94
 
 ```bash
 # List all secrets (Actions + Dependabot) for every repository
-python3 github_secrets_manager.py list --org somaz94
+python3 github-secrets-manage.py list --org somaz94
 
 # Dependabot secrets only
-python3 github_secrets_manager.py list --org somaz94 --target dependabot
+python3 github-secrets-manage.py list --org somaz94 --target dependabot
 ```
+
+<br/>
+
+### Add a Secret (Actions + Dependabot)
+
+Adds a single new secret to Actions and immediately propagates it to Dependabot — one command, two secret stores. The value is read from an env var whose name matches `--secret-name` (no need to pass the value on the command line).
+
+```bash
+# Export the value, then run `add`
+export GITLAB_TOKEN='glpat-xxxxxxxxxxxx'
+python3 github-secrets-manage.py add --org somaz94 --secret-name GITLAB_TOKEN
+
+# Actions only (skip Dependabot sync)
+python3 github-secrets-manage.py add --org somaz94 --secret-name GITLAB_TOKEN --no-sync
+
+# Target specific repositories only
+python3 github-secrets-manage.py add --org somaz94 --secret-name GITLAB_TOKEN \
+  --repos kube-diff,git-bridge
+
+# Dry-run preview
+python3 github-secrets-manage.py add --org somaz94 --secret-name GITLAB_TOKEN --dry-run
+```
+
+> If you prefer passing the value inline, `--secret-value 'glpat-xxx'` is supported too, but `export` keeps secrets out of shell history.
+
+`add` differs from `update` in intent:
+- **add** — one secret, default target is *both* stores (Actions → Dependabot sync built in)
+- **update** — bulk rotation; choose target explicitly via `--target actions|dependabot|both`
 
 <br/>
 
@@ -128,16 +157,16 @@ python3 github_secrets_manager.py list --org somaz94 --target dependabot
 
 ```bash
 # Sync all Actions secrets to Dependabot
-python3 github_secrets_manager.py sync --org somaz94
+python3 github-secrets-manage.py sync --org somaz94
 
 # Sync specific secrets only
-python3 github_secrets_manager.py sync --org somaz94 --secrets GITLAB_TOKEN,PAT_TOKEN
+python3 github-secrets-manage.py sync --org somaz94 --secrets GITLAB_TOKEN,PAT_TOKEN
 
 # Overwrite existing Dependabot secrets
-python3 github_secrets_manager.py sync --org somaz94 --force
+python3 github-secrets-manage.py sync --org somaz94 --force
 
 # Dry-run (preview without changes)
-python3 github_secrets_manager.py sync --org somaz94 --dry-run
+python3 github-secrets-manage.py sync --org somaz94 --dry-run
 ```
 
 <br/>
@@ -146,11 +175,11 @@ python3 github_secrets_manager.py sync --org somaz94 --dry-run
 
 ```bash
 # Update across Actions (default target)
-python3 github_secrets_manager.py update --org somaz94 \
+python3 github-secrets-manage.py update --org somaz94 \
   --secret-name GITLAB_TOKEN --secret-value 'glpat-xxxxxxxxxxxx'
 
 # Update across both Actions and Dependabot
-python3 github_secrets_manager.py update --org somaz94 \
+python3 github-secrets-manage.py update --org somaz94 \
   --secret-name GITLAB_TOKEN --secret-value 'glpat-xxxxxxxxxxxx' --target both
 ```
 
@@ -160,10 +189,10 @@ python3 github_secrets_manager.py update --org somaz94 \
 
 ```bash
 # Delete from Actions (default target)
-python3 github_secrets_manager.py delete --org somaz94 --secret-name OLD_SECRET
+python3 github-secrets-manage.py delete --org somaz94 --secret-name OLD_SECRET
 
 # Delete from both Actions and Dependabot
-python3 github_secrets_manager.py delete --org somaz94 --secret-name OLD_SECRET --target both
+python3 github-secrets-manage.py delete --org somaz94 --secret-name OLD_SECRET --target both
 ```
 
 <br/>
@@ -173,7 +202,7 @@ python3 github_secrets_manager.py delete --org somaz94 --secret-name OLD_SECRET 
 All commands support `--repos` to limit scope:
 
 ```bash
-python3 github_secrets_manager.py sync --org somaz94 --repos kube-diff,git-bridge
+python3 github-secrets-manage.py sync --org somaz94 --repos kube-diff,git-bridge
 ```
 
 <br/>

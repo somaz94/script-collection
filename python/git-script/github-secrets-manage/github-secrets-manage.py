@@ -6,36 +6,44 @@ Bulk-manage Actions / Dependabot Secrets across repositories.
 
 Features:
   - list       : List secrets for all repositories
+  - add        : Add a single secret to Actions and auto-sync to Dependabot
   - sync       : Copy Actions Secrets -> Dependabot Secrets
   - update     : Add/update a specific secret across all repositories
   - delete     : Delete a specific secret from all repositories
 
 Usage examples:
   # List secrets
-  python github_secrets_manager.py list --org somaz94
-  python github_secrets_manager.py list --org somaz94 --target dependabot
+  python github-secrets-manage.py list --org somaz94
+  python github-secrets-manage.py list --org somaz94 --target dependabot
+
+  # Add a new secret to Actions and immediately sync to Dependabot
+  # (value is picked up from an env var with the same name)
+  export GITLAB_TOKEN='glpat-xxx'
+  python github-secrets-manage.py add --org somaz94 --secret-name GITLAB_TOKEN
+  # Actions only (skip Dependabot sync)
+  python github-secrets-manage.py add --org somaz94 --secret-name GITLAB_TOKEN --no-sync
 
   # Sync Actions secrets to Dependabot (env var names matched directly)
   export GITLAB_TOKEN='glpat-xxx'
   export PAT_TOKEN='ghp-xxx'
-  python github_secrets_manager.py sync --org somaz94
+  python github-secrets-manage.py sync --org somaz94
 
   # Sync using a .env file
-  python github_secrets_manager.py sync --org somaz94 --env-file .secrets.env
+  python github-secrets-manage.py sync --org somaz94 --env-file .secrets.env
 
   # Sync using JSON env var
   export SECRET_VALUES='{"GITLAB_TOKEN":"glpat-xxx","PAT_TOKEN":"ghp-xxx"}'
-  python github_secrets_manager.py sync --org somaz94
+  python github-secrets-manage.py sync --org somaz94
 
   # Update a specific secret (Actions + Dependabot simultaneously)
-  python github_secrets_manager.py update --org somaz94 \
+  python github-secrets-manage.py update --org somaz94 \
     --secret-name GITLAB_TOKEN --secret-value 'glpat-xxx' --target both
 
   # Target specific repositories only
-  python github_secrets_manager.py sync --org somaz94 --repos kube-diff,git-bridge
+  python github-secrets-manage.py sync --org somaz94 --repos kube-diff,git-bridge
 
   # Dry-run mode
-  python github_secrets_manager.py sync --org somaz94 --dry-run
+  python github-secrets-manage.py sync --org somaz94 --dry-run
 """
 
 from __future__ import annotations
@@ -332,6 +340,64 @@ def cmd_sync(client: GitHubClient, args: argparse.Namespace):
     _print_summary(stats, args)
 
 
+def cmd_add(client: GitHubClient, args: argparse.Namespace):
+    """Add a single secret to Actions and auto-sync to Dependabot."""
+    repos = _resolve_repos(client, args)
+    targets = ["actions"] if args.no_sync else ["actions", "dependabot"]
+
+    secret_value = (
+        args.secret_value
+        or os.environ.get("SECRET_VALUE", "")
+        or os.environ.get(args.secret_name, "")
+    )
+    if not secret_value:
+        _print_err(
+            f"Secret value is required. Provide it via --secret-value or the {args.secret_name} env var."
+        )
+        sys.exit(1)
+
+    scope_desc = "Actions only" if args.no_sync else "Actions + Dependabot (sync)"
+    print(f"\n{Color.BOLD}Secret Add: {args.secret_name}{Color.RESET}")
+    print(f"Scope: {len(repos)} repositories | target: {scope_desc}")
+    if args.dry_run:
+        _print_warn("DRY-RUN mode: no actual changes will be made")
+    print()
+
+    if not args.dry_run and not args.yes:
+        msg = (
+            f"Add {args.secret_name} to Actions"
+            + ("" if args.no_sync else " and sync to Dependabot")
+            + f" across {len(repos)} repositories?"
+        )
+        if not _confirm(msg):
+            return
+
+    stats = Stats()
+
+    for idx, repo in enumerate(repos, 1):
+        _print_progress(idx, len(repos), f"{args.org}/{repo}")
+
+        for t in targets:
+            exists = client.secret_exists(args.org, repo, t, args.secret_name)
+            action = "update" if exists else "add"
+
+            if args.dry_run:
+                result = RepoResult(repo, action, t, True, "dry-run")
+                stats.record(result)
+                _print_ok(f"[{t}] would {action} (dry-run)")
+                continue
+
+            ok = _set_secret(client, args.org, repo, t, args.secret_name, secret_value)
+            result = RepoResult(repo, action, t, ok)
+            stats.record(result)
+            if ok:
+                _print_ok(f"[{t}] {action}d")
+            else:
+                _print_err(f"[{t}] failed")
+
+    _print_summary(stats, args)
+
+
 def cmd_update(client: GitHubClient, args: argparse.Namespace):
     """Add/update a specific secret across all repositories."""
     repos = _resolve_repos(client, args)
@@ -606,33 +672,37 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     parser = argparse.ArgumentParser(
-        prog="github_secrets_manager",
+        prog="github-secrets-manage",
         description="Bulk management tool for GitHub repository secrets",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
   # List secrets
-  python github_secrets_manager.py list --org somaz94
-  python github_secrets_manager.py list --org somaz94 --target dependabot
+  python github-secrets-manage.py list --org somaz94
+  python github-secrets-manage.py list --org somaz94 --target dependabot
+
+  # Add a new secret to Actions and sync to Dependabot in one shot
+  export GITLAB_TOKEN='glpat-xxx'
+  python github-secrets-manage.py add --org somaz94 --secret-name GITLAB_TOKEN
 
   # Sync Actions secrets to Dependabot (env var names matched directly)
   export GITLAB_TOKEN='glpat-xxx'
   export PAT_TOKEN='ghp-xxx'
-  python github_secrets_manager.py sync --org somaz94
+  python github-secrets-manage.py sync --org somaz94
 
   # Sync using a .env file
-  python github_secrets_manager.py sync --org somaz94 --env-file .secrets.env
+  python github-secrets-manage.py sync --org somaz94 --env-file .secrets.env
 
   # Sync using JSON env var
   export SECRET_VALUES='{"GITLAB_TOKEN":"glpat-xxx","PAT_TOKEN":"ghp-xxx"}'
-  python github_secrets_manager.py sync --org somaz94
+  python github-secrets-manage.py sync --org somaz94
 
   # Update a specific secret (Actions + Dependabot simultaneously)
-  python github_secrets_manager.py update --org somaz94 \\
+  python github-secrets-manage.py update --org somaz94 \\
     --secret-name GITLAB_TOKEN --secret-value 'glpat-xxx' --target both
 
   # Target specific repositories only
-  python github_secrets_manager.py sync --org somaz94 --repos kube-diff,git-bridge
+  python github-secrets-manage.py sync --org somaz94 --repos kube-diff,git-bridge
         """,
     )
 
@@ -644,6 +714,23 @@ Examples:
         choices=["actions", "dependabot", "both"],
         default="both",
         help="Target secret store (default: both)",
+    )
+
+    # add
+    p_add = sub.add_parser(
+        "add",
+        parents=[common],
+        help="Add a single secret to Actions and auto-sync to Dependabot",
+    )
+    p_add.add_argument("--secret-name", required=True, help="Secret name")
+    p_add.add_argument(
+        "--secret-value",
+        help="Secret value (or SECRET_VALUE / same-name env var)",
+    )
+    p_add.add_argument(
+        "--no-sync",
+        action="store_true",
+        help="Skip Dependabot sync (Actions only)",
     )
 
     # sync
@@ -703,6 +790,7 @@ def main():
 
     commands = {
         "list": cmd_list,
+        "add": cmd_add,
         "sync": cmd_sync,
         "update": cmd_update,
         "delete": cmd_delete,

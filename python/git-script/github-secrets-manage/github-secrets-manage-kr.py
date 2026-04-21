@@ -6,36 +6,44 @@ Actions / Dependabot Secret을 일괄 관리합니다.
 
 주요 기능:
   - list       : 모든 리포지토리의 Secret 목록 조회
+  - add        : 단일 Secret을 Actions에 추가하고 바로 Dependabot까지 Sync
   - sync       : Actions Secrets → Dependabot Secrets 복사
   - update     : 특정 Secret을 모든 리포지토리에 추가/업데이트
   - delete     : 특정 Secret을 모든 리포지토리에서 삭제
 
 사용 예시:
   # Secret 목록 조회
-  python github_secrets_manager.py list --org somaz94
-  python github_secrets_manager.py list --org somaz94 --target dependabot
+  python github-secrets-manage.py list --org somaz94
+  python github-secrets-manage.py list --org somaz94 --target dependabot
+
+  # 새 Secret을 Actions에 추가하고 즉시 Dependabot까지 Sync
+  # (동명 환경변수에서 값을 읽음)
+  export GITLAB_TOKEN='glpat-xxx'
+  python github-secrets-manage.py add --org somaz94 --secret-name GITLAB_TOKEN
+  # Actions 에만 추가 (Dependabot sync 생략)
+  python github-secrets-manage.py add --org somaz94 --secret-name GITLAB_TOKEN --no-sync
 
   # Actions secrets를 Dependabot으로 동기화 (환경변수 이름 그대로)
   export GITLAB_TOKEN='glpat-xxx'
   export PAT_TOKEN='ghp-xxx'
-  python github_secrets_manager.py sync --org somaz94
+  python github-secrets-manage.py sync --org somaz94
 
   # .env 파일로 동기화
-  python github_secrets_manager.py sync --org somaz94 --env-file .secrets.env
+  python github-secrets-manage.py sync --org somaz94 --env-file .secrets.env
 
   # JSON 환경변수로도 가능
   export SECRET_VALUES='{"GITLAB_TOKEN":"glpat-xxx","PAT_TOKEN":"ghp-xxx"}'
-  python github_secrets_manager.py sync --org somaz94
+  python github-secrets-manage.py sync --org somaz94
 
   # 특정 secret 업데이트 (Actions + Dependabot 동시)
-  python github_secrets_manager.py update --org somaz94 \
+  python github-secrets-manage.py update --org somaz94 \
     --secret-name GITLAB_TOKEN --secret-value 'glpat-xxx' --target both
 
   # 특정 리포지토리만
-  python github_secrets_manager.py sync --org somaz94 --repos kube-diff,git-bridge
+  python github-secrets-manage.py sync --org somaz94 --repos kube-diff,git-bridge
 
   # Dry-run 모드
-  python github_secrets_manager.py sync --org somaz94 --dry-run
+  python github-secrets-manage.py sync --org somaz94 --dry-run
 """
 
 from __future__ import annotations
@@ -332,6 +340,64 @@ def cmd_sync(client: GitHubClient, args: argparse.Namespace):
     _print_summary(stats, args)
 
 
+def cmd_add(client: GitHubClient, args: argparse.Namespace):
+    """단일 Secret을 Actions에 추가하고 바로 Dependabot까지 Sync"""
+    repos = _resolve_repos(client, args)
+    targets = ["actions"] if args.no_sync else ["actions", "dependabot"]
+
+    secret_value = (
+        args.secret_value
+        or os.environ.get("SECRET_VALUE", "")
+        or os.environ.get(args.secret_name, "")
+    )
+    if not secret_value:
+        _print_err(
+            f"Secret 값이 필요합니다. --secret-value 또는 환경변수 {args.secret_name}으로 제공하세요."
+        )
+        sys.exit(1)
+
+    scope_desc = "Actions only" if args.no_sync else "Actions + Dependabot (sync)"
+    print(f"\n{Color.BOLD}Secret 추가: {args.secret_name}{Color.RESET}")
+    print(f"대상: {len(repos)}개 리포지토리 | target: {scope_desc}")
+    if args.dry_run:
+        _print_warn("DRY-RUN 모드: 실제 변경 없음")
+    print()
+
+    if not args.dry_run and not args.yes:
+        msg = (
+            f"{args.secret_name}을 Actions에 추가"
+            + ("" if args.no_sync else " 후 Dependabot까지 Sync")
+            + f" ({len(repos)}개 리포지토리). 진행하시겠습니까?"
+        )
+        if not _confirm(msg):
+            return
+
+    stats = Stats()
+
+    for idx, repo in enumerate(repos, 1):
+        _print_progress(idx, len(repos), f"{args.org}/{repo}")
+
+        for t in targets:
+            exists = client.secret_exists(args.org, repo, t, args.secret_name)
+            action = "update" if exists else "add"
+
+            if args.dry_run:
+                result = RepoResult(repo, action, t, True, "dry-run")
+                stats.record(result)
+                _print_ok(f"[{t}] would {action} (dry-run)")
+                continue
+
+            ok = _set_secret(client, args.org, repo, t, args.secret_name, secret_value)
+            result = RepoResult(repo, action, t, ok)
+            stats.record(result)
+            if ok:
+                _print_ok(f"[{t}] {action}d")
+            else:
+                _print_err(f"[{t}] 실패")
+
+    _print_summary(stats, args)
+
+
 def cmd_update(client: GitHubClient, args: argparse.Namespace):
     """특정 Secret을 모든 리포지토리에 추가/업데이트"""
     repos = _resolve_repos(client, args)
@@ -605,33 +671,37 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     parser = argparse.ArgumentParser(
-        prog="github_secrets_manager",
+        prog="github-secrets-manage",
         description="GitHub Repository Secrets 일괄 관리 도구",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 사용 예시:
   # 목록 조회
-  python github_secrets_manager.py list --org somaz94
-  python github_secrets_manager.py list --org somaz94 --target dependabot
+  python github-secrets-manage.py list --org somaz94
+  python github-secrets-manage.py list --org somaz94 --target dependabot
+
+  # 새 Secret을 Actions에 추가 + Dependabot까지 한 번에 Sync
+  export GITLAB_TOKEN='glpat-xxx'
+  python github-secrets-manage.py add --org somaz94 --secret-name GITLAB_TOKEN
 
   # Actions secrets를 Dependabot으로 동기화 (환경변수 이름 그대로)
   export GITLAB_TOKEN='glpat-xxx'
   export PAT_TOKEN='ghp-xxx'
-  python github_secrets_manager.py sync --org somaz94
+  python github-secrets-manage.py sync --org somaz94
 
   # .env 파일 사용
-  python github_secrets_manager.py sync --org somaz94 --env-file .secrets.env
+  python github-secrets-manage.py sync --org somaz94 --env-file .secrets.env
 
   # JSON 환경변수
   export SECRET_VALUES='{"GITLAB_TOKEN":"glpat-xxx","PAT_TOKEN":"ghp-xxx"}'
-  python github_secrets_manager.py sync --org somaz94
+  python github-secrets-manage.py sync --org somaz94
 
   # 특정 secret 업데이트 (Actions + Dependabot 동시)
-  python github_secrets_manager.py update --org somaz94 \\
+  python github-secrets-manage.py update --org somaz94 \\
     --secret-name GITLAB_TOKEN --secret-value 'glpat-xxx' --target both
 
   # 특정 리포지토리만
-  python github_secrets_manager.py sync --org somaz94 --repos kube-diff,git-bridge
+  python github-secrets-manage.py sync --org somaz94 --repos kube-diff,git-bridge
         """,
     )
 
@@ -643,6 +713,23 @@ def build_parser() -> argparse.ArgumentParser:
         choices=["actions", "dependabot", "both"],
         default="both",
         help="조회 대상 (기본: both)",
+    )
+
+    # add
+    p_add = sub.add_parser(
+        "add",
+        parents=[common],
+        help="단일 Secret을 Actions에 추가하고 바로 Dependabot까지 Sync",
+    )
+    p_add.add_argument("--secret-name", required=True, help="Secret 이름")
+    p_add.add_argument(
+        "--secret-value",
+        help="Secret 값 (생략 시 SECRET_VALUE 또는 동명 환경변수 사용)",
+    )
+    p_add.add_argument(
+        "--no-sync",
+        action="store_true",
+        help="Dependabot sync 생략 (Actions only)",
     )
 
     # sync
@@ -702,6 +789,7 @@ def main():
 
     commands = {
         "list": cmd_list,
+        "add": cmd_add,
         "sync": cmd_sync,
         "update": cmd_update,
         "delete": cmd_delete,
