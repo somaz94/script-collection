@@ -2,6 +2,28 @@
 set -euo pipefail
 IFS=$'\n\t'
 
+# -h/--help guard — running without args immediately calls the GitLab API
+case "${1:-}" in
+  -h|--help)
+    cat <<USAGE
+Usage: ./${0##*/} [-h | --help]
+
+  Create users on the new GitLab instance and add them to GROUP_NAME.
+
+  Target users: USERNAMES array at the top of the script (edit before running)
+  Server config: GITLAB_URL, PRIVATE_TOKEN, DEFAULT_PASSWORD, EMAIL_DOMAIN, GROUP_NAME (top of script)
+
+Options:
+  -h, --help    Show this help and exit
+
+Flow:
+  1) Resolve GROUP_NAME -> group ID via GitLab API
+  2) Iterate USERNAMES: create user, then add as group member
+USAGE
+    exit 0
+    ;;
+esac
+
 # GitLab Configuration Variables
 # ---------------------------
 # GITLAB_URL: Base URL of your GitLab instance

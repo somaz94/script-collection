@@ -2,6 +2,29 @@
 set -euo pipefail
 IFS=$'\n\t'
 
+# -h/--help guard — running without args immediately tries NAS auth
+case "${1:-}" in
+  -h|--help)
+    cat <<USAGE
+Usage: ./${0##*/} [-h | --help]
+
+  Create users on a Synology NAS and grant group/shared-folder permissions.
+
+  Target users: USERNAMES array at the top of the script (edit before running)
+  Server config: nas.conf in the same directory
+  Description : DESCRIPTION variable at the top
+
+Options:
+  -h, --help    Show this help and exit
+
+Flow:
+  1) Query NAS API info -> authenticate FileStation + Core sessions
+  2) Iterate USERNAMES: create user, add to group, grant share permissions
+USAGE
+    exit 0
+    ;;
+esac
+
 # --- Inline NAS config (was nas.conf in the source repo) ---
 NAS_IP="192.0.2.5"
 NAS_URL="http://${NAS_IP}:5000"

@@ -2,6 +2,28 @@
 set -euo pipefail
 IFS=$'\n\t'
 
+# -h/--help guard — running without args immediately calls the GitLab API
+case "${1:-}" in
+  -h|--help)
+    cat <<USAGE
+Usage: ./${0##*/} [-h | --help]
+
+  Remove users from the new GitLab instance (deletes the user account).
+
+  Target users: USERNAMES array at the top of the script (edit before running)
+  Server config: GITLAB_URL, PRIVATE_TOKEN, GROUP_NAME (top of script)
+
+Options:
+  -h, --help    Show this help and exit
+
+Flow:
+  1) Resolve each USERNAME to a user ID via GitLab API
+  2) DELETE /api/v4/users/<id> with PRIVATE-TOKEN header
+USAGE
+    exit 0
+    ;;
+esac
+
 # GitLab Configuration Variables
 # ---------------------------
 # GITLAB_URL: Base URL of your GitLab instance

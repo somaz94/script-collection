@@ -2,6 +2,28 @@
 set -euo pipefail
 IFS=$'\n\t'
 
+# -h/--help guard — running without args immediately tries NAS auth
+case "${1:-}" in
+  -h|--help)
+    cat <<USAGE
+Usage: ./${0##*/} [-h | --help]
+
+  Delete users from a Synology NAS.
+
+  Target users: USERNAMES array at the top of the script (edit before running)
+  Server config: nas.conf in the same directory
+
+Options:
+  -h, --help    Show this help and exit
+
+Flow:
+  1) Query NAS API info -> authenticate Core session
+  2) Iterate USERNAMES: verify existence, then delete
+USAGE
+    exit 0
+    ;;
+esac
+
 # --- Inline NAS config (was nas.conf in the source repo) ---
 NAS_IP="192.0.2.5"
 NAS_URL="http://${NAS_IP}:5000"
