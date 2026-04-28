@@ -1,81 +1,88 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
+IFS=$'\n\t'
+
+# 공용 lib — scripts/lib/prompts.sh
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/../_lib/prompts.sh"
 
 ###################
-# Global Variables #
+# 글로벌 변수 #
 ###################
 
-# Elasticsearch connection settings
+# Elasticsearch 연결 설정
 ELASTIC_USER="elastic"
-ELASTIC_PASSWORD=""
-ELASTIC_HOST=""
+ELASTIC_PASSWORD="CHANGE_ME"
+ELASTIC_HOST="http://elasticsearch.example.com"
 
-# Index names to clean up (array)
+# 정리할 인덱스 이름 (배열)
 INDEX_NAMES=()
 
-# Default indices if none are specified
-# Example: DEFAULT_INDICES=("logstash-*" "filebeat-*" "metricbeat-*")
-# Leave empty to require explicit index specification
+# 지정되지 않은 경우 기본 인덱스
+# 예시: DEFAULT_INDICES=("logstash-*" "filebeat-*" "metricbeat-*")
+# 명시적 인덱스 지정을 요구하려면 비워두세요
 DEFAULT_INDICES=()
 
-# Retention period settings
-# Minimum retention days
+# 보존 기간 설정
+# 최소 보존 일수
 MIN_RETENTION_DAYS=7
-# Default retention period (days)
+# 기본 보존 기간 (일)
 RETENTION_DAYS=90
 
-# Force merge flag
+# 강제 병합 플래그
 FORCE_MERGE=false
 
-# Index deletion flag
+# 인덱스 삭제 플래그
 DELETE_INDEX=false
 
-# Date format
+# 날짜 형식
 TODAY=$(date +%Y.%m.%d)
 
-# Help message function
+# 도움말 출력 함수
 show_help() {
   cat << EOF
-Usage: $(basename "$0") [options] [INDEX names...]
+사용법: $(basename "$0") [옵션] [INDEX 이름들...]
 
-Description:
-  Deletes documents older than the specified retention period from the given Elasticsearch indices.
+설명:
+  지정한 Elasticsearch 인덱스에서, 설정한 보존 기간보다 오래된 문서를 삭제합니다.
 
-Options:
-  -h, --help              Display this help message
-  -d, --days DAYS         Retention period (in days, default: ${RETENTION_DAYS} days, minimum: ${MIN_RETENTION_DAYS} days)
-  -i, --indices LIST      List of index names to delete (comma-separated string)
-  -l, --list              List all available indices
-  -s, --status            Display the status of all indices
-  -f, --force-merge       Run force merge for disk optimization after deletion
-  -c, --check-settings    Check index settings (total_fields.limit, etc.)
-  -u, --update-limit NUM  Change the total_fields.limit value of an index
-  --delete-index          Completely delete the index itself (Warning: irreversible!)
+옵션:
+  -h, --help              이 도움말 메시지를 출력합니다
+  -d, --days DAYS         보존 기간 (일 단위, 기본: ${RETENTION_DAYS}일, 최소: ${MIN_RETENTION_DAYS}일)
+  -i, --indices LIST      삭제할 인덱스 이름 목록 (쉼표로 구분된 문자열)
+  -l, --list              사용 가능한 모든 인덱스를 나열합니다
+  -s, --status            모든 인덱스의 상태를 출력합니다
+  -f, --force-merge       삭제 후 디스크 최적화를 위한 강제 병합 실행
+  -c, --check-settings    인덱스 설정 확인 (total_fields.limit 등)
+  -u, --update-limit NUM  인덱스의 total_fields.limit 값 변경
+  --delete-index          인덱스 자체를 완전히 삭제합니다 (경고: 복구 불가능!)
 
-Examples:
-  $(basename "$0") index1 index2                  # Clean specific indices based on ${RETENTION_DAYS}-day retention
-  $(basename "$0") -d 60 index1 index2            # Clean specific indices based on 60-day retention
-  $(basename "$0") -i "index1,index2" -d 60       # Clean comma-separated indices based on 60-day retention
-  $(basename "$0") -l                             # View index list
-  $(basename "$0") -s                             # Check index status
-  $(basename "$0") -f index1                      # Delete and force merge index1
-  $(basename "$0") -d 60 -f index1 index2         # Delete index1, index2 based on 60-day retention + merge
-  $(basename "$0") -c index1                      # Check index1 settings
-  $(basename "$0") -c -i "index1,index2"          # Check settings of multiple indices
-  $(basename "$0") -u 2000 index1                  # Change total_fields.limit of index1 to 2000
-  $(basename "$0") -u 2000 -i "index1,index2"     # Change total_fields.limit of multiple indices
-  $(basename "$0") --delete-index index1          # Completely delete index1
-  $(basename "$0") --delete-index -i "index1,index2"  # Delete multiple indices
+예시:
+  $(basename "$0") index1 index2                  # 특정 인덱스를 ${RETENTION_DAYS}일 기준으로 정리
+  $(basename "$0") -d 60 index1 index2            # 특정 인덱스를 60일 기준으로 정리
+  $(basename "$0") -i "index1,index2" -d 60       # 쉼표로 구분된 인덱스를 60일 기준으로 정리
+  $(basename "$0") -l                             # 인덱스 목록 보기
+  $(basename "$0") -s                             # 인덱스 상태 확인
+  $(basename "$0") -f index1                      # index1 삭제 후 강제 병합 실행
+  $(basename "$0") -d 60 -f index1 index2         # index1, index2를 60일 기준 삭제 + 병합
+  $(basename "$0") -c index1                      # index1 설정 확인
+  $(basename "$0") -c -i "index1,index2"          # 여러 인덱스 설정 확인
+  $(basename "$0") -u 2000 index1                  # index1의 total_fields.limit을 2000으로 변경
+  $(basename "$0") -u 2000 -i "index1,index2"     # 여러 인덱스의 total_fields.limit 변경
+  $(basename "$0") --delete-index index1          # index1 인덱스 전체 삭제
+  $(basename "$0") --delete-index -i "index1,index2"  # 여러 인덱스 삭제
 
-Notes:
-- At least one index must be specified
-- For safety, the minimum retention period is ${MIN_RETENTION_DAYS} days
-- Use the -l option first to check the list of available indices
-- The --delete-index option permanently deletes indices and cannot be undone!
+참고사항:
+- 최소 하나 이상의 인덱스를 지정해야 합니다
+- 안전을 위해 최소 보존 기간은 ${MIN_RETENTION_DAYS}일입니다
+- 먼저 -l 옵션을 사용하여 사용 가능한 인덱스 목록을 확인하세요
+- --delete-index 옵션은 인덱스를 완전히 삭제하며 복구할 수 없습니다!
 EOF
   exit 0
 }
 
-# Parse command-line arguments
+# 명령행 인수 파싱
 while [[ $# -gt 0 ]]; do
     case $1 in
         -h|--help)
@@ -90,12 +97,12 @@ while [[ $# -gt 0 ]]; do
             shift 2
             ;;
         -l|--list)
-            echo "Available indices:"
+            echo "사용 가능한 인덱스:"
             curl -s -k -u "$ELASTIC_USER:$ELASTIC_PASSWORD" "$ELASTIC_HOST/_cat/indices?v" | awk 'NR>1 {print $3}' | sort
             exit 0
             ;;
         -s|--status)
-            echo "Current status of all indices:"
+            echo "모든 인덱스의 현재 상태:"
             curl -s -k -u "$ELASTIC_USER:$ELASTIC_PASSWORD" "$ELASTIC_HOST/_cat/indices?v"
             exit 0
             ;;
@@ -116,8 +123,8 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         -*)
-            echo "Unknown option: $1" >&2
-            echo "See '$(basename $0) --help' for more information." >&2
+            echo "알 수 없는 옵션: $1" >&2
+            echo "자세한 정보는 '$(basename $0) --help'를 참조하세요." >&2
             exit 1
             ;;
         *)
@@ -127,40 +134,40 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Index settings check mode
+# 인덱스 설정 확인 모드
 if [ "$CHECK_SETTINGS" = true ]; then
     if [ ${#INDEX_NAMES[@]} -eq 0 ] || [ -z "${INDEX_NAMES[0]}" ]; then
-        echo "Error: No indices specified to check settings." >&2
-        echo "See '$(basename $0) --help' for more information." >&2
+        echo "오류: 설정을 확인할 인덱스가 지정되지 않았습니다." >&2
+        echo "자세한 정보는 '$(basename $0) --help'를 참조하세요." >&2
         exit 1
     fi
 
     echo "=========================================="
-    echo "Index Settings Check"
+    echo "▸ 인덱스 설정 확인"
     echo "=========================================="
     for INDEX in "${INDEX_NAMES[@]}"; do
         echo ""
-        echo "Index: $INDEX"
+        echo "▶ 인덱스: $INDEX"
         echo "------------------------------------------"
 
-        # Retrieve full settings with flat_settings
+        # flat_settings로 전체 설정 조회
         SETTINGS=$(curl -s -k -u "$ELASTIC_USER:$ELASTIC_PASSWORD" \
             "$ELASTIC_HOST/$INDEX/_settings?flat_settings=true&pretty")
 
-        # Check if the index exists
+        # 인덱스 존재 여부 확인
         if echo "$SETTINGS" | grep -q '"error"'; then
-            echo "✗ Index not found"
+            echo "✗ 인덱스를 찾을 수 없습니다"
             echo "---"
             continue
         fi
 
-        # Extract key settings
-        TOTAL_FIELDS=$(echo "$SETTINGS" | grep '"index.mapping.total_fields.limit"' | awk -F'"' '{print $4}')
-        SHARDS=$(echo "$SETTINGS" | grep '"index.number_of_shards"' | awk -F'"' '{print $4}')
-        REPLICAS=$(echo "$SETTINGS" | grep '"index.number_of_replicas"' | awk -F'"' '{print $4}')
-        CREATION_DATE=$(echo "$SETTINGS" | grep '"index.creation_date"' | awk -F'"' '{print $4}')
+        # 주요 설정 추출 (flat_settings=true 응답: { "<index>": { "settings": { ... } } })
+        TOTAL_FIELDS=$(echo "$SETTINGS" | jq -r '.[].settings."index.mapping.total_fields.limit" // empty')
+        SHARDS=$(echo "$SETTINGS" | jq -r '.[].settings."index.number_of_shards" // empty')
+        REPLICAS=$(echo "$SETTINGS" | jq -r '.[].settings."index.number_of_replicas" // empty')
+        CREATION_DATE=$(echo "$SETTINGS" | jq -r '.[].settings."index.creation_date" // empty')
 
-        echo "  total_fields.limit : ${TOTAL_FIELDS:-1000 (default)}"
+        echo "  total_fields.limit : ${TOTAL_FIELDS:-1000 (기본값)}"
         echo "  number_of_shards   : ${SHARDS:-N/A}"
         echo "  number_of_replicas : ${REPLICAS:-N/A}"
         if [ -n "$CREATION_DATE" ]; then
@@ -169,13 +176,13 @@ if [ "$CHECK_SETTINGS" = true ]; then
             else
                 CREATED=$(date -d @$((CREATION_DATE / 1000)) '+%Y-%m-%d %H:%M:%S')
             fi
-            echo "  Creation date      : $CREATED"
+            echo "  생성 일시          : $CREATED"
         fi
 
-        # Check field count
+        # 필드 수 확인
         FIELD_COUNT=$(curl -s -k -u "$ELASTIC_USER:$ELASTIC_PASSWORD" \
             "$ELASTIC_HOST/$INDEX/_mapping?pretty" | grep '"type"' | wc -l | tr -d ' ')
-        echo "  Current mapped fields : ~${FIELD_COUNT}"
+        echo "  현재 매핑 필드 수  : ~${FIELD_COUNT}개"
         echo "---"
     done
     echo ""
@@ -183,35 +190,33 @@ if [ "$CHECK_SETTINGS" = true ]; then
     exit 0
 fi
 
-# Index settings update mode
+# 인덱스 설정 변경 모드
 if [ -n "$UPDATE_LIMIT" ]; then
-    # Numeric validation
+    # 숫자 검증
     if ! [[ "$UPDATE_LIMIT" =~ ^[0-9]+$ ]]; then
-        echo "Error: total_fields.limit value must be a positive integer" >&2
+        echo "오류: total_fields.limit 값은 양의 정수여야 합니다" >&2
         exit 1
     fi
 
     if [ ${#INDEX_NAMES[@]} -eq 0 ] || [ -z "${INDEX_NAMES[0]}" ]; then
-        echo "Error: No indices specified to update settings." >&2
-        echo "See '$(basename $0) --help' for more information." >&2
+        echo "오류: 설정을 변경할 인덱스가 지정되지 않았습니다." >&2
+        echo "자세한 정보는 '$(basename $0) --help'를 참조하세요." >&2
         exit 1
     fi
 
     echo "=========================================="
-    echo "Index Settings Update"
+    echo "▸  인덱스 설정 변경"
     echo "=========================================="
-    echo "Target indices:"
+    echo "대상 인덱스:"
     for INDEX in "${INDEX_NAMES[@]}"; do
         echo "  • $INDEX"
     done
     echo ""
-    echo "Change: total_fields.limit -> $UPDATE_LIMIT"
+    echo "변경 내용: total_fields.limit → $UPDATE_LIMIT"
     echo "=========================================="
     echo ""
-    read -p "Do you want to change the settings? (y/N): " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        echo "Operation cancelled."
+    if ! confirm_yes_no "설정을 변경하시겠습니까?"; then
+        echo "작업이 취소되었습니다."
         exit 0
     fi
 
@@ -220,7 +225,7 @@ if [ -n "$UPDATE_LIMIT" ]; then
     FAIL_COUNT=0
 
     for INDEX in "${INDEX_NAMES[@]}"; do
-        echo "Updating settings: $INDEX"
+        echo "설정 변경 중: $INDEX"
 
         RESPONSE=$(curl -s -k -u "$ELASTIC_USER:$ELASTIC_PASSWORD" \
             -X PUT "$ELASTIC_HOST/$INDEX/_settings" \
@@ -228,11 +233,11 @@ if [ -n "$UPDATE_LIMIT" ]; then
             -d "{\"index.mapping.total_fields.limit\": $UPDATE_LIMIT}")
 
         if echo "$RESPONSE" | grep -q '"acknowledged":true'; then
-            echo "✓ $INDEX: total_fields.limit -> $UPDATE_LIMIT updated successfully"
+            echo "✓ $INDEX: total_fields.limit → $UPDATE_LIMIT 변경 완료"
             ((SUCCESS_COUNT++))
         else
-            echo "✗ $INDEX: Failed to update settings"
-            echo "  Response: $RESPONSE"
+            echo "✗ $INDEX: 설정 변경 실패"
+            echo "  응답: $RESPONSE"
             ((FAIL_COUNT++))
         fi
         echo "---"
@@ -240,68 +245,66 @@ if [ -n "$UPDATE_LIMIT" ]; then
 
     echo ""
     echo "=========================================="
-    echo "Settings Update Complete"
+    echo "설정 변경 완료"
     echo "=========================================="
-    echo "Succeeded: ${SUCCESS_COUNT}"
-    echo "Failed: ${FAIL_COUNT}"
-    echo "Total: ${#INDEX_NAMES[@]}"
+    echo "성공: ${SUCCESS_COUNT}개"
+    echo "실패: ${FAIL_COUNT}개"
+    echo "총계: ${#INDEX_NAMES[@]}개"
     echo "=========================================="
     exit 0
 fi
 
-# Index deletion mode
+# 인덱스 삭제 모드인 경우
 if [ "$DELETE_INDEX" = true ]; then
-    # Check if indices are specified
+    # 인덱스가 지정되었는지 확인
     if [ ${#INDEX_NAMES[@]} -eq 0 ] || [ -z "${INDEX_NAMES[0]}" ]; then
-        echo "Error: No indices specified for deletion." >&2
-        echo "See '$(basename $0) --help' for more information." >&2
+        echo "오류: 삭제할 인덱스가 지정되지 않았습니다." >&2
+        echo "자세한 정보는 '$(basename $0) --help'를 참조하세요." >&2
         exit 1
     fi
     
-    # Display list of indices to delete
+    # 삭제할 인덱스 목록 출력
     echo "=========================================="
-    echo "Index Deletion Operation"
+    echo "▲  인덱스 삭제 작업"
     echo "=========================================="
-    echo "The following indices will be permanently deleted:"
+    echo "다음 인덱스들이 완전히 삭제됩니다:"
     echo ""
     for INDEX in "${INDEX_NAMES[@]}"; do
         echo "  • $INDEX"
     done
     echo ""
-    echo "A total of ${#INDEX_NAMES[@]} indices will be deleted."
+    echo "총 ${#INDEX_NAMES[@]}개의 인덱스가 삭제됩니다."
     echo "=========================================="
     echo ""
-    echo "WARNING: This operation cannot be undone!"
-    read -p "Are you sure you want to delete these indices? (Type DELETE): " -r
-    echo
-    if [ "$REPLY" != "DELETE" ]; then
-        echo "Operation cancelled."
+    echo "▲  경고: 이 작업은 되돌릴 수 없습니다!"
+    if ! confirm_typed_word "정말로 이 인덱스들을 삭제하시겠습니까?" "DELETE"; then
+        echo "작업이 취소되었습니다."
         exit 0
     fi
     
     echo ""
-    echo "Starting index deletion..."
+    echo "인덱스 삭제를 시작합니다..."
     echo ""
     
-    # Deletion counters
+    # 삭제 카운터
     SUCCESS_COUNT=0
     FAIL_COUNT=0
     
-    # Iterate over specified indices and delete them
+    # 지정된 인덱스들을 반복하여 삭제
     for INDEX in "${INDEX_NAMES[@]}"; do
-        echo "Deleting index: $INDEX"
+        echo "인덱스 삭제 중: $INDEX"
         
         RESPONSE=$(curl -s -k -u "$ELASTIC_USER:$ELASTIC_PASSWORD" \
             -X DELETE "$ELASTIC_HOST/$INDEX" \
             -H "Content-Type: application/json")
         
-        # Check if the deletion was successful
+        # 삭제가 성공했는지 확인
         if echo "$RESPONSE" | grep -q '"acknowledged":true'; then
-            echo "✓ Successfully deleted index ${INDEX}"
+            echo "✓ 인덱스 ${INDEX}를 성공적으로 삭제했습니다"
             ((SUCCESS_COUNT++))
         else
-            echo "✗ Failed to delete index ${INDEX}"
-            echo "Response: $RESPONSE"
+            echo "✗ 인덱스 ${INDEX} 삭제에 실패했습니다"
+            echo "응답: $RESPONSE"
             ((FAIL_COUNT++))
         fi
         echo "---"
@@ -309,50 +312,50 @@ if [ "$DELETE_INDEX" = true ]; then
     
     echo ""
     echo "=========================================="
-    echo "Index Deletion Complete"
+    echo "인덱스 삭제 완료"
     echo "=========================================="
-    echo "Succeeded: ${SUCCESS_COUNT}"
-    echo "Failed: ${FAIL_COUNT}"
-    echo "Total: ${#INDEX_NAMES[@]}"
+    echo "성공: ${SUCCESS_COUNT}개"
+    echo "실패: ${FAIL_COUNT}개"
+    echo "총계: ${#INDEX_NAMES[@]}개"
     echo "=========================================="
     
     exit 0
 fi
 
-# Document deletion logic below (when not in index deletion mode)
+# 이하 기존 문서 삭제 로직 (인덱스 삭제 모드가 아닌 경우)
 
-# RETENTION_DAYS validation
+# RETENTION_DAYS 검증
 if ! [[ "$RETENTION_DAYS" =~ ^[0-9]+$ ]]; then
-    echo "Error: Days must be a positive integer" >&2
-    echo "See '$(basename $0) --help' for more information." >&2
+    echo "오류: 일수는 양의 정수여야 합니다" >&2
+    echo "자세한 정보는 '$(basename $0) --help'를 참조하세요." >&2
     exit 1
 fi
 
 if [ "$RETENTION_DAYS" -lt "$MIN_RETENTION_DAYS" ]; then
-    echo "Error: Retention period cannot be less than ${MIN_RETENTION_DAYS} days" >&2
-    echo "See '$(basename $0) --help' for more information." >&2
+    echo "오류: 보존 기간은 ${MIN_RETENTION_DAYS}일보다 작을 수 없습니다" >&2
+    echo "자세한 정보는 '$(basename $0) --help'를 참조하세요." >&2
     exit 1
 fi
 
-# Use default indices if none are specified
+# 인덱스가 지정되지 않은 경우 기본 인덱스 사용
 if [ ${#INDEX_NAMES[@]} -eq 0 ]; then
     INDEX_NAMES=("${DEFAULT_INDICES[@]}")
 fi
 
-# Verify that indices are actually specified (not empty)
+# 실제로 인덱스가 지정되었는지 확인 (비어있지 않은지)
 if [ ${#INDEX_NAMES[@]} -eq 0 ] || [ -z "${INDEX_NAMES[0]}" ]; then
-    echo "Error: No indices specified for cleanup." >&2
-    echo "Please specify indices using one of the following methods:" >&2
-    echo "  1. Pass as arguments: $(basename $0) index1 index2" >&2
-    echo "  2. Use -i option: $(basename $0) -i \"index1,index2\"" >&2
-    echo "  3. Set DEFAULT_INDICES in the script" >&2
+    echo "오류: 정리할 인덱스가 지정되지 않았습니다." >&2
+    echo "다음 방법 중 하나로 인덱스를 지정해 주세요:" >&2
+    echo "  1. 인수로 전달: $(basename $0) index1 index2" >&2
+    echo "  2. -i 옵션 사용: $(basename $0) -i \"index1,index2\"" >&2
+    echo "  3. 스크립트에서 DEFAULT_INDICES 설정" >&2
     echo "" >&2
-    echo "Use '$(basename $0) -l' to see the list of available indices." >&2
-    echo "See '$(basename $0) --help' for more information." >&2
+    echo "사용 가능한 인덱스 목록을 보려면 '$(basename $0) -l'을 사용하세요." >&2
+    echo "자세한 정보는 '$(basename $0) --help'를 참조하세요." >&2
     exit 1
 fi
 
-# Check OS type and use the appropriate date command
+# OS 타입 확인하고 적절한 date 명령 사용
 if [[ "$OSTYPE" == "darwin"* ]]; then
     # macOS
     THRESHOLD_DATE=$(date -v-${RETENTION_DAYS}d -u +"%Y-%m-%dT%H:%M:%S.000Z")
@@ -361,21 +364,19 @@ else
     THRESHOLD_DATE=$(date -d "-${RETENTION_DAYS} days" -u +"%Y-%m-%dT%H:%M:%S.000Z")
 fi
 
-# Iterate over specified indices and delete old documents
-echo "Indices to clean up: ${INDEX_NAMES[@]}"
-echo "Retention period: ${RETENTION_DAYS} days"
-echo "Deleting documents older than: $THRESHOLD_DATE"
-read -p "Are you sure you want to delete old documents from these indices? (y/N): " -n 1 -r
-echo
-if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-    echo "Operation cancelled."
+# 지정된 인덱스들을 반복하여 오래된 문서 삭제
+echo "정리할 인덱스: ${INDEX_NAMES[@]}"
+echo "보존 기간: ${RETENTION_DAYS}일"
+echo "다음 날짜보다 오래된 문서를 삭제합니다: $THRESHOLD_DATE"
+if ! confirm_yes_no "정말로 이 인덱스들에서 오래된 문서를 삭제하시겠습니까?"; then
+    echo "작업이 취소되었습니다."
     exit 0
 fi
 
 for INDEX in "${INDEX_NAMES[@]}"; do
-    echo "Processing index: $INDEX"
+    echo "인덱스 처리 중: $INDEX"
     
-    # Delete documents older than the threshold date
+    # 임계 날짜보다 오래된 문서 삭제
     DELETE_QUERY='{
         "query": {
             "range": {
@@ -386,37 +387,37 @@ for INDEX in "${INDEX_NAMES[@]}"; do
         }
     }'
     
-    echo "Deleting old documents from ${INDEX}..."
+    echo "${INDEX}에서 오래된 문서 삭제 중..."
     RESPONSE=$(curl -s -k -u "$ELASTIC_USER:$ELASTIC_PASSWORD" \
         -X POST "$ELASTIC_HOST/$INDEX/_delete_by_query" \
         -H "Content-Type: application/json" \
         -d "$DELETE_QUERY")
     
-    # Check if deletion was successful and extract deleted count
+    # 삭제가 성공했는지 확인하고 삭제된 수 추출
     if echo "$RESPONSE" | grep -q '"deleted"'; then
         DELETED_COUNT=$(echo "$RESPONSE" | grep -o '"deleted":[0-9]*' | cut -d':' -f2)
-        echo "✓ Successfully deleted ${DELETED_COUNT} documents from index ${INDEX}"
+        echo "✓ 인덱스 ${INDEX}에서 ${DELETED_COUNT}개 문서를 성공적으로 삭제했습니다"
     else
-        echo "✗ Failed to delete documents from index ${INDEX}"
-        echo "Response: $RESPONSE"
+        echo "✗ 인덱스 ${INDEX}에서 문서 삭제에 실패했습니다"
+        echo "응답: $RESPONSE"
     fi
 
-    # If force merge was requested
+    # 강제 병합이 요청된 경우
     if [ "$FORCE_MERGE" = true ]; then
-        echo "Force merging index: ${INDEX}..."
+        echo "인덱스 강제 병합 중: ${INDEX}..."
         MERGE_RESPONSE=$(curl -s -k -u "$ELASTIC_USER:$ELASTIC_PASSWORD" \
             -X POST "$ELASTIC_HOST/$INDEX/_forcemerge?only_expunge_deletes=true" \
             -H "Content-Type: application/json")
         
-        # Check if force merge was successful
+        # 강제 병합이 성공했는지 확인
         if echo "$MERGE_RESPONSE" | grep -q '"successful"'; then
-            echo "✓ Successfully force merged index ${INDEX}"
+            echo "✓ 인덱스 ${INDEX}를 성공적으로 강제 병합했습니다"
         else
-            echo "✗ Failed to force merge index ${INDEX}"
-            echo "Response: $MERGE_RESPONSE"
+            echo "✗ 인덱스 ${INDEX} 강제 병합에 실패했습니다"
+            echo "응답: $MERGE_RESPONSE"
         fi
     fi
     echo "---"
 done
 
-echo "Document cleanup process completed."
+echo "문서 정리 프로세스가 완료되었습니다."

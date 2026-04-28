@@ -1,4 +1,11 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
+IFS=$'\n\t'
+
+# Shared lib — scripts/lib/prompts.sh
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/../_lib/prompts.sh"
 
 ###################
 # Global Variables #
@@ -239,9 +246,7 @@ do_import() {
     fi
     echo "=========================================="
     echo ""
-    read -p "Proceed with import? (y/N): " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+    if ! confirm_yes_no "Proceed with import?"; then
         echo "Aborted."
         exit 0
     fi

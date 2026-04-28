@@ -1,4 +1,6 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
+IFS=$'\n\t'
 
 # Modular Harbor Image Cleanup Script
 # -------------------------
@@ -8,12 +10,12 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Load all modules
-source "$SCRIPT_DIR/modules/harbor-config-en.sh"
-source "$SCRIPT_DIR/modules/harbor-utils-en.sh"
-source "$SCRIPT_DIR/modules/harbor-auth-en.sh"
-source "$SCRIPT_DIR/modules/harbor-repository-en.sh"
-source "$SCRIPT_DIR/modules/harbor-image-en.sh"
-source "$SCRIPT_DIR/modules/harbor-project-stats-en.sh"
+source "$SCRIPT_DIR/modules/harbor-config.sh"
+source "$SCRIPT_DIR/modules/harbor-utils.sh"
+source "$SCRIPT_DIR/modules/harbor-auth.sh"
+source "$SCRIPT_DIR/modules/harbor-repository.sh"
+source "$SCRIPT_DIR/modules/harbor-image.sh"
+source "$SCRIPT_DIR/modules/harbor-project-stats.sh"
 
 # Global variables
 SHOW_PROJECT_STATS=false

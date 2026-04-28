@@ -1,5 +1,6 @@
-#!/bin/bash
-set -e
+#!/usr/bin/env bash
+set -euo pipefail
+IFS=$'\n\t'
 
 #############################################
 # GitLab Source Restore from Google Drive
@@ -12,11 +13,10 @@ RCLONE_CONFIG="${RCLONE_CONFIG:-}"
 SELECT_MODE=false
 COMPARE_REPO=""
 
-# Color
-GREEN='\033[0;32m'
-RED='\033[0;31m'
-YELLOW='\033[1;33m'
-NC='\033[0m'
+# Color variables — scripts/lib/colors.sh
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/../_lib/colors.sh"
 
 usage() {
   echo "Usage: $0 [options] <project-name> [gitlab-repo-url]"

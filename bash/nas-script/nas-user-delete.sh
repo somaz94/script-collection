@@ -1,4 +1,6 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
+IFS=$'\n\t'
 
 # NAS Configuration Variables
 # -------------------------
@@ -11,12 +13,12 @@ NAS_IP="192.0.2.5"
 NAS_URL="http://$NAS_IP:5000"
 ADMIN_USERNAME="user"
 ADMIN_PASSWORD="CHANGE_ME"
-GROUP_NAME="ExampleMember"
+GROUP_NAME="ConcritMember"
 
 # List of users to be deleted
 # Add or remove usernames as needed
 USERNAMES=(
-  test2
+  example_user
 )
 
 # Initialize API Information

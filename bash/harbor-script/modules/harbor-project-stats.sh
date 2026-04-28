@@ -1,4 +1,6 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
+IFS=$'\n\t'
 
 # Harbor Project Statistics Module (English Version) - Simple Version
 # Description: Module for querying artifact counts by repository for specific Harbor projects

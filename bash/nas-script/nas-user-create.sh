@@ -1,4 +1,6 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
+IFS=$'\n\t'
 
 # NAS Configuration Variables
 # -------------------------
@@ -15,14 +17,14 @@ NAS_URL="http://$NAS_IP:5000"
 ADMIN_USERNAME="user"
 ADMIN_PASSWORD="CHANGE_ME"
 EMAIL_DOMAIN="example.com"
-GROUP_NAME="ExampleMember"
+GROUP_NAME="ConcritMember"
 DEFAULT_PASSWORD="CHANGE_ME"
 DESCRIPTION="server_user"
 
 # List of users to be created
 # Add or remove usernames as needed
 USERNAMES=(
-  jmpark
+  example_user
 )
 
 # Initialize API Information

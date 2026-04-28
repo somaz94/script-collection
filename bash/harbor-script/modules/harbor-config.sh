@@ -1,4 +1,6 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
+IFS=$'\n\t'
 
 # Harbor Configuration Module
 # Manages configuration-related functions
@@ -7,9 +9,9 @@
 
 # Default configuration values
 DEFAULT_HARBOR_URL="harbor.example.com"           # Default Harbor registry URL
-DEFAULT_HARBOR_PROTOCOL="http"                   # Default protocol (http/https) for Harbor API
+DEFAULT_HARBOR_PROTOCOL="https"                  # Default protocol (http/https) for Harbor API — matches harbor-helm externalURL
 DEFAULT_HARBOR_USER="admin"                      # Default Harbor admin username
-DEFAULT_HARBOR_PASS="exampleAdminPassword"                # Default Harbor admin password
+DEFAULT_HARBOR_PASS="CHANGE_ME"                # Default Harbor admin password
 DEFAULT_PROJECT_NAME="example-project"                  # Default Harbor project name to clean up
 DEFAULT_IMAGES_TO_KEEP=100                       # Default number of newest images to keep
 DEFAULT_BATCH_SIZE=10                            # Default number of images to delete in parallel
@@ -18,11 +20,9 @@ DEFAULT_DRY_RUN=false                            # Default dry run mode (no actu
 DEFAULT_AUTO_CONFIRM=false                       # Default auto confirm setting (skip confirmation prompts when true)
 DEFAULT_REPOSITORIES=("admin")                    # Default repositories to process within the project
 
-# Colors for output
-RED='\033[0;31m'                                 # Red color for error messages
-GREEN='\033[0;32m'                               # Green color for success messages
-YELLOW='\033[1;33m'                              # Yellow color for warnings and info messages
-NC='\033[0m' # No Color                          # Reset terminal color
+# Colors for output — scripts/lib/colors.sh
+# shellcheck disable=SC1091
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../../lib/colors.sh"
 
 # Print help message
 show_help() {

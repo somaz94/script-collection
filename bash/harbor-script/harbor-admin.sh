@@ -3,24 +3,32 @@
 # Harbor Admin Helper
 # =============================================================================
 # Manages Harbor users, projects, members, and OIDC group mappings via the
-# Harbor v2.0 REST API. Designed for a self-signed HTTPS setup.
+# Harbor v2.0 REST API. Designed for the example.com self-signed HTTPS setup.
 #
 # Dependencies: curl, python3 (stdlib only)
 #
 # Environment overrides:
 #   HARBOR_URL              default: https://harbor.example.com
-#   HARBOR_IP               default: 192.0.2.10   (for --resolve bypass)
+#   HARBOR_IP               default: 192.0.2.55   (for --resolve bypass)
 #   HARBOR_ADMIN            default: admin
-#   HARBOR_ADMIN_PASSWORD   required (no default; export before running)
+#   HARBOR_ADMIN_PASSWORD   default: read from ../values/mgmt.yaml
 #   HARBOR_NO_RESOLVE=1     skip --resolve (use OS DNS)
 # =============================================================================
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+VALUES_FILE="$SCRIPT_DIR/../../../cicd/harbor-helm/values/mgmt.yaml"
+
 HARBOR_URL="${HARBOR_URL:-https://harbor.example.com}"
-HARBOR_IP="${HARBOR_IP:-192.0.2.10}"
+HARBOR_IP="${HARBOR_IP:-192.0.2.55}"
 HARBOR_ADMIN="${HARBOR_ADMIN:-admin}"
 if [ -z "${HARBOR_ADMIN_PASSWORD:-}" ]; then
-  echo "ERROR: HARBOR_ADMIN_PASSWORD is not set. Export it before running." >&2
+  if [ -f "$VALUES_FILE" ]; then
+    HARBOR_ADMIN_PASSWORD=$(grep '^harborAdminPassword:' "$VALUES_FILE" | awk -F'"' '{print $2}' || true)
+  fi
+fi
+if [ -z "${HARBOR_ADMIN_PASSWORD:-}" ]; then
+  echo "ERROR: HARBOR_ADMIN_PASSWORD not set and could not be read from $VALUES_FILE" >&2
   exit 1
 fi
 
@@ -36,13 +44,9 @@ declare -A ROLES=(
   [limited_guest]=5
 )
 
-# Color output (respect NO_COLOR, TTY detection)
-if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
-  C_RED=$'\033[31m'; C_GRN=$'\033[32m'; C_YEL=$'\033[33m'
-  C_BLU=$'\033[34m'; C_DIM=$'\033[2m'; C_RST=$'\033[0m'; C_BLD=$'\033[1m'
-else
-  C_RED=; C_GRN=; C_YEL=; C_BLU=; C_DIM=; C_RST=; C_BLD=
-fi
+# Color output — scripts/lib/colors.sh
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/../_lib/colors.sh"
 
 # -----------------------------------------------
 # HTTP helpers
@@ -92,10 +96,10 @@ api_status() {
 # Output helpers
 # -----------------------------------------------
 
-_die()  { echo "${C_RED}ERROR:${C_RST} $*" >&2; exit 1; }
-_info() { echo "${C_BLU}→${C_RST} $*" >&2; }
-_ok()   { echo "${C_GRN}✓${C_RST} $*" >&2; }
-_warn() { echo "${C_YEL}!${C_RST} $*" >&2; }
+_die()  { echo "${RED}ERROR:${NC} $*" >&2; exit 1; }
+_info() { echo "${BLUE}→${NC} $*" >&2; }
+_ok()   { echo "${GREEN}✓${NC} $*" >&2; }
+_warn() { echo "${YELLOW}!${NC} $*" >&2; }
 
 # -----------------------------------------------
 # Lookups
@@ -364,18 +368,18 @@ cmd_systeminfo() {
 
 usage() {
   cat <<EOF
-${C_BLD}Harbor Admin Helper${C_RST}
+${BOLD}Harbor Admin Helper${NC}
 
   Usage: $(basename "$0") <command> [args...]
 
-${C_BLD}User management${C_RST}
+${BOLD}User management${NC}
   whoami                          Who am I (admin sanity check)
   users                           List all users
   user-info <user|email>          Show user details
   promote <user|email>            Promote to sysadmin
   demote <user|email>             Demote from sysadmin
 
-${C_BLD}Project / membership${C_RST}
+${BOLD}Project / membership${NC}
   projects                        List projects
   project-members <project>       List project members
   add-member <project> <target> <role>
@@ -383,22 +387,22 @@ ${C_BLD}Project / membership${C_RST}
                                   role:   project-admin | maintainer | developer | guest | limited-guest
   remove-member <project> <user|mid>
 
-${C_BLD}OIDC groups${C_RST}
+${BOLD}OIDC groups${NC}
   groups                          List user groups
   add-group <oidc-group-name>     Register an OIDC group (type=3)
 
-${C_BLD}Diagnostics${C_RST}
+${BOLD}Diagnostics${NC}
   config                          Dump OIDC-related configuration
   systeminfo                      Public systeminfo (auth_mode etc.)
 
-${C_BLD}Environment${C_RST}
+${BOLD}Environment${NC}
   HARBOR_URL              default ${HARBOR_URL}
   HARBOR_IP               default ${HARBOR_IP} (used for --resolve)
   HARBOR_ADMIN            default ${HARBOR_ADMIN}
-  HARBOR_ADMIN_PASSWORD   required (export before running)
+  HARBOR_ADMIN_PASSWORD   default reads from ../values/mgmt.yaml
   HARBOR_NO_RESOLVE=1     use OS DNS instead of --resolve
 
-${C_BLD}Examples${C_RST}
+${BOLD}Examples${NC}
   $(basename "$0") users
   $(basename "$0") promote admin@example.com
   $(basename "$0") add-member library admin@example.com maintainer

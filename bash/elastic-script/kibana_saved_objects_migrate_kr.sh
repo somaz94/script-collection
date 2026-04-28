@@ -1,4 +1,11 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
+IFS=$'\n\t'
+
+# 공용 lib — scripts/lib/prompts.sh
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/../_lib/prompts.sh"
 
 ###################
 # 글로벌 변수 #
@@ -239,9 +246,7 @@ do_import() {
     fi
     echo "=========================================="
     echo ""
-    read -p "Import 를 진행하시겠습니까? (y/N): " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+    if ! confirm_yes_no "Import 를 진행하시겠습니까?"; then
         echo "작업이 취소되었습니다."
         exit 0
     fi

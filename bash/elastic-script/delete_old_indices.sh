@@ -1,4 +1,11 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
+IFS=$'\n\t'
+
+# Shared lib — scripts/lib/prompts.sh
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/../_lib/prompts.sh"
 
 ###################
 # Global Variables #
@@ -151,10 +158,11 @@ if [ "$CHECK_SETTINGS" = true ]; then
             continue
         fi
 
-        TOTAL_FIELDS=$(echo "$SETTINGS" | grep '"index.mapping.total_fields.limit"' | awk -F'"' '{print $4}')
-        SHARDS=$(echo "$SETTINGS" | grep '"index.number_of_shards"' | awk -F'"' '{print $4}')
-        REPLICAS=$(echo "$SETTINGS" | grep '"index.number_of_replicas"' | awk -F'"' '{print $4}')
-        CREATION_DATE=$(echo "$SETTINGS" | grep '"index.creation_date"' | awk -F'"' '{print $4}')
+        # Extract main settings (flat_settings=true response: { "<index>": { "settings": { ... } } })
+        TOTAL_FIELDS=$(echo "$SETTINGS" | jq -r '.[].settings."index.mapping.total_fields.limit" // empty')
+        SHARDS=$(echo "$SETTINGS" | jq -r '.[].settings."index.number_of_shards" // empty')
+        REPLICAS=$(echo "$SETTINGS" | jq -r '.[].settings."index.number_of_replicas" // empty')
+        CREATION_DATE=$(echo "$SETTINGS" | jq -r '.[].settings."index.creation_date" // empty')
 
         echo "  total_fields.limit : ${TOTAL_FIELDS:-1000 (default)}"
         echo "  number_of_shards   : ${SHARDS:-N/A}"
@@ -202,9 +210,7 @@ if [ -n "$UPDATE_LIMIT" ]; then
     echo "Change: total_fields.limit → $UPDATE_LIMIT"
     echo "=========================================="
     echo ""
-    read -p "Are you sure you want to update these settings? (y/N): " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+    if ! confirm_yes_no "Are you sure you want to update these settings?"; then
         echo "Operation cancelled."
         exit 0
     fi
@@ -266,9 +272,7 @@ if [ "$DELETE_INDEX" = true ]; then
     echo "=========================================="
     echo ""
     echo "▲  WARNING: This operation is irreversible!"
-    read -p "Are you sure you want to delete these indices? (Type 'DELETE' to confirm): " -r
-    echo
-    if [ "$REPLY" != "DELETE" ]; then
+    if ! confirm_typed_word "Are you sure you want to delete these indices?" "DELETE"; then
         echo "Operation cancelled."
         exit 0
     fi
@@ -359,9 +363,7 @@ fi
 echo "Indices to clean: ${INDEX_NAMES[@]}"
 echo "Retention period: ${RETENTION_DAYS} days"
 echo "Will delete documents older than: $THRESHOLD_DATE"
-read -p "Are you sure you want to delete old documents from these indices? (y/N): " -n 1 -r
-echo
-if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+if ! confirm_yes_no "Are you sure you want to delete old documents from these indices?"; then
     echo "Operation cancelled."
     exit 0
 fi

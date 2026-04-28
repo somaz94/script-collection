@@ -1,5 +1,6 @@
-#!/bin/bash
-set -e
+#!/usr/bin/env bash
+set -euo pipefail
+IFS=$'\n\t'
 
 #############################################
 # GitLab Artifact Cleanup Tool
@@ -15,12 +16,12 @@ EXPIRED_ONLY=false
 DRY_RUN=false
 OLDER_THAN=""
 
-# Colors
-GREEN='\033[0;32m'
-RED='\033[0;31m'
-YELLOW='\033[1;33m'
-CYAN='\033[0;36m'
-NC='\033[0m'
+# Shared lib — scripts/lib/colors.sh, prompts.sh
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/../_lib/colors.sh"
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/../_lib/prompts.sh"
 
 usage() {
   echo "Usage: $0 [options] <mode>"
@@ -258,18 +259,9 @@ print(json.dumps(results))
   rm -f "$tmp_file"
 }
 
-# Human-readable size
+# Human-readable size — delegates to lib/prompts.sh::format_human_size
 human_size() {
-  local bytes=$1
-  if [ "$bytes" -ge 1073741824 ]; then
-    echo "$(echo "scale=1; $bytes / 1073741824" | bc) GiB"
-  elif [ "$bytes" -ge 1048576 ]; then
-    echo "$(echo "scale=1; $bytes / 1048576" | bc) MiB"
-  elif [ "$bytes" -ge 1024 ]; then
-    echo "$(echo "scale=1; $bytes / 1024" | bc) KiB"
-  else
-    echo "${bytes} B"
-  fi
+  format_human_size "$1"
 }
 
 # Print list
@@ -380,9 +372,7 @@ case "$MODE" in
     print_list "$ARTIFACTS" || exit 0
     if [ "$DRY_RUN" = false ]; then
       echo -e "${RED}All artifacts listed above will be deleted.${NC}"
-      echo -ne "${YELLOW}Continue? (y/N): ${NC}"
-      read -r CONFIRM
-      if [ "$CONFIRM" != "y" ] && [ "$CONFIRM" != "Y" ]; then
+      if ! confirm_yes_no "Continue?"; then
         echo "Cancelled."
         exit 0
       fi
@@ -392,9 +382,7 @@ case "$MODE" in
 
   cleanup)
     print_list "$ARTIFACTS" || exit 0
-    echo -ne "${YELLOW}Delete the artifacts listed above? (y/N): ${NC}"
-    read -r CONFIRM
-    if [ "$CONFIRM" != "y" ] && [ "$CONFIRM" != "Y" ]; then
+    if ! confirm_yes_no "Delete the artifacts listed above?"; then
       echo "Cancelled."
       exit 0
     fi
