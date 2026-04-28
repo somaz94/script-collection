@@ -2,18 +2,20 @@
 set -euo pipefail
 IFS=$'\n\t'
 
-# NAS Configuration Variables
-# -------------------------
-# NAS_IP: IP address of the Synology NAS
-# NAS_URL: Base URL for NAS API access
-# ADMIN_USERNAME: Administrator username for NAS access
-# ADMIN_PASSWORD: Administrator password for NAS access
-# GROUP_NAME: Group name for user verification
+# --- Inline NAS config (was nas.conf in the source repo) ---
 NAS_IP="192.0.2.5"
-NAS_URL="http://$NAS_IP:5000"
+NAS_URL="http://${NAS_IP}:5000"
+
+# 관리자 자격증명 (DSM admin)
 ADMIN_USERNAME="user"
 ADMIN_PASSWORD="CHANGE_ME"
-GROUP_NAME="ConcritMember"
+
+# 사용자 그룹 (create 시 그룹 멤버 추가, delete 시 검증용)
+GROUP_NAME="UserMember"
+
+# 신규 사용자 기본값 (create 전용 — delete 에서는 무시됨)
+EMAIL_DOMAIN="example.com"
+DEFAULT_PASSWORD="CHANGE_ME"
 
 # List of users to be deleted
 # Add or remove usernames as needed

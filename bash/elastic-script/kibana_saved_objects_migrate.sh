@@ -2,10 +2,12 @@
 set -euo pipefail
 IFS=$'\n\t'
 
-# Shared lib — scripts/lib/prompts.sh
+# Shared lib — scripts/lib/{prompts,es-helpers}.sh
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 source "${SCRIPT_DIR}/../_lib/prompts.sh"
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/../_lib/es-helpers.sh"
 
 ###################
 # Global Variables #
@@ -96,18 +98,16 @@ EOF
 # Helpers #
 ###################
 
-# Auto-fetch SOURCE password from Kubernetes secret if not set
+# Auto-fetch SOURCE password from Kubernetes secret — delegates to lib es_fetch_password_from_k8s
 fetch_source_password() {
     if [ -n "$SOURCE_PASSWORD" ]; then
         return 0
     fi
     echo "> Fetching SOURCE password from monitoring/elasticsearch-master-credentials..."
-    SOURCE_PASSWORD=$(kubectl -n monitoring get secret elasticsearch-master-credentials \
-        -o jsonpath='{.data.password}' 2>/dev/null | base64 -d 2>/dev/null)
-    if [ -z "$SOURCE_PASSWORD" ]; then
-        echo "x Failed to fetch SOURCE password. Pass --source-password explicitly." >&2
+    SOURCE_PASSWORD=$(es_fetch_password_from_k8s monitoring elasticsearch-master-credentials password) || {
+        echo "  Pass --source-password explicitly." >&2
         exit 1
-    fi
+    }
     echo "v SOURCE password fetched"
     echo ""
 }
@@ -119,13 +119,9 @@ build_types_json() {
     }'
 }
 
-# Pretty-print JSON if python3 is available
+# Pretty-print JSON — delegates to lib es_pretty_json
 pretty_json() {
-    if command -v python3 >/dev/null 2>&1; then
-        echo "$1" | python3 -m json.tool 2>/dev/null || echo "$1"
-    else
-        echo "$1"
-    fi
+    es_pretty_json "$1"
 }
 
 ###################
@@ -152,7 +148,7 @@ do_list() {
     local fail=0
     for t in "${TYPES[@]}"; do
         local resp count
-        resp=$(curl -sk -u "$user:$pw" \
+        resp=$(es_curl "$user" "$pw" \
             -H 'kbn-xsrf: true' \
             "$host/api/saved_objects/_find?type=${t}&per_page=1&fields=id")
         count=$(echo "$resp" | grep -o '"total":[0-9]*' | head -1 | cut -d: -f2)
@@ -191,7 +187,7 @@ do_export() {
     local types_json http_code
     types_json=$(build_types_json "$SAVED_OBJECT_TYPES")
 
-    http_code=$(curl -sk -u "$SOURCE_USER:$SOURCE_PASSWORD" \
+    http_code=$(es_curl "$SOURCE_USER" "$SOURCE_PASSWORD" \
         -H 'kbn-xsrf: true' -H 'Content-Type: application/json' \
         -X POST "$SOURCE_HOST/api/saved_objects/_export" \
         -d "{\"type\":[${types_json}],\"includeReferencesDeep\":true}" \
@@ -256,7 +252,7 @@ do_import() {
     [ "$OVERWRITE" = true ] && url_params="?overwrite=true"
 
     local resp
-    resp=$(curl -sk -u "$TARGET_USER:$TARGET_PASSWORD" \
+    resp=$(es_curl "$TARGET_USER" "$TARGET_PASSWORD" \
         -H 'kbn-xsrf: true' \
         -X POST "$TARGET_HOST/api/saved_objects/_import${url_params}" \
         --form file=@"$NDJSON_FILE")

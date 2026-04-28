@@ -138,17 +138,6 @@ role_id() {
   echo "$id"
 }
 
-role_name() {
-  case "$1" in
-    1) echo project-admin ;;
-    2) echo developer ;;
-    3) echo guest ;;
-    4) echo maintainer ;;
-    5) echo limited-guest ;;
-    *) echo "unknown($1)" ;;
-  esac
-}
-
 # -----------------------------------------------
 # Commands
 # -----------------------------------------------

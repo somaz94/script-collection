@@ -2,10 +2,12 @@
 set -euo pipefail
 IFS=$'\n\t'
 
-# 공용 lib — scripts/lib/prompts.sh
+# 공용 lib — scripts/lib/{prompts,es-helpers}.sh
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 source "${SCRIPT_DIR}/../_lib/prompts.sh"
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/../_lib/es-helpers.sh"
 
 ###################
 # 글로벌 변수 #
@@ -98,12 +100,12 @@ while [[ $# -gt 0 ]]; do
             ;;
         -l|--list)
             echo "사용 가능한 인덱스:"
-            curl -s -k -u "$ELASTIC_USER:$ELASTIC_PASSWORD" "$ELASTIC_HOST/_cat/indices?v" | awk 'NR>1 {print $3}' | sort
+            es_curl "$ELASTIC_USER" "$ELASTIC_PASSWORD" "$ELASTIC_HOST/_cat/indices?v" | awk 'NR>1 {print $3}' | sort
             exit 0
             ;;
         -s|--status)
             echo "모든 인덱스의 현재 상태:"
-            curl -s -k -u "$ELASTIC_USER:$ELASTIC_PASSWORD" "$ELASTIC_HOST/_cat/indices?v"
+            es_curl "$ELASTIC_USER" "$ELASTIC_PASSWORD" "$ELASTIC_HOST/_cat/indices?v"
             exit 0
             ;;
         -f|--force-merge)
@@ -151,7 +153,7 @@ if [ "$CHECK_SETTINGS" = true ]; then
         echo "------------------------------------------"
 
         # flat_settings로 전체 설정 조회
-        SETTINGS=$(curl -s -k -u "$ELASTIC_USER:$ELASTIC_PASSWORD" \
+        SETTINGS=$(es_curl "$ELASTIC_USER" "$ELASTIC_PASSWORD" \
             "$ELASTIC_HOST/$INDEX/_settings?flat_settings=true&pretty")
 
         # 인덱스 존재 여부 확인
@@ -180,7 +182,7 @@ if [ "$CHECK_SETTINGS" = true ]; then
         fi
 
         # 필드 수 확인
-        FIELD_COUNT=$(curl -s -k -u "$ELASTIC_USER:$ELASTIC_PASSWORD" \
+        FIELD_COUNT=$(es_curl "$ELASTIC_USER" "$ELASTIC_PASSWORD" \
             "$ELASTIC_HOST/$INDEX/_mapping?pretty" | grep '"type"' | wc -l | tr -d ' ')
         echo "  현재 매핑 필드 수  : ~${FIELD_COUNT}개"
         echo "---"
@@ -227,7 +229,7 @@ if [ -n "$UPDATE_LIMIT" ]; then
     for INDEX in "${INDEX_NAMES[@]}"; do
         echo "설정 변경 중: $INDEX"
 
-        RESPONSE=$(curl -s -k -u "$ELASTIC_USER:$ELASTIC_PASSWORD" \
+        RESPONSE=$(es_curl "$ELASTIC_USER" "$ELASTIC_PASSWORD" \
             -X PUT "$ELASTIC_HOST/$INDEX/_settings" \
             -H "Content-Type: application/json" \
             -d "{\"index.mapping.total_fields.limit\": $UPDATE_LIMIT}")
@@ -294,7 +296,7 @@ if [ "$DELETE_INDEX" = true ]; then
     for INDEX in "${INDEX_NAMES[@]}"; do
         echo "인덱스 삭제 중: $INDEX"
         
-        RESPONSE=$(curl -s -k -u "$ELASTIC_USER:$ELASTIC_PASSWORD" \
+        RESPONSE=$(es_curl "$ELASTIC_USER" "$ELASTIC_PASSWORD" \
             -X DELETE "$ELASTIC_HOST/$INDEX" \
             -H "Content-Type: application/json")
         
@@ -388,7 +390,7 @@ for INDEX in "${INDEX_NAMES[@]}"; do
     }'
     
     echo "${INDEX}에서 오래된 문서 삭제 중..."
-    RESPONSE=$(curl -s -k -u "$ELASTIC_USER:$ELASTIC_PASSWORD" \
+    RESPONSE=$(es_curl "$ELASTIC_USER" "$ELASTIC_PASSWORD" \
         -X POST "$ELASTIC_HOST/$INDEX/_delete_by_query" \
         -H "Content-Type: application/json" \
         -d "$DELETE_QUERY")
@@ -405,7 +407,7 @@ for INDEX in "${INDEX_NAMES[@]}"; do
     # 강제 병합이 요청된 경우
     if [ "$FORCE_MERGE" = true ]; then
         echo "인덱스 강제 병합 중: ${INDEX}..."
-        MERGE_RESPONSE=$(curl -s -k -u "$ELASTIC_USER:$ELASTIC_PASSWORD" \
+        MERGE_RESPONSE=$(es_curl "$ELASTIC_USER" "$ELASTIC_PASSWORD" \
             -X POST "$ELASTIC_HOST/$INDEX/_forcemerge?only_expunge_deletes=true" \
             -H "Content-Type: application/json")
         

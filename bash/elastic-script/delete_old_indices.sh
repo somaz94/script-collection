@@ -2,10 +2,12 @@
 set -euo pipefail
 IFS=$'\n\t'
 
-# Shared lib — scripts/lib/prompts.sh
+# Shared lib — scripts/lib/{prompts,es-helpers}.sh
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 source "${SCRIPT_DIR}/../_lib/prompts.sh"
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/../_lib/es-helpers.sh"
 
 ###################
 # Global Variables #
@@ -97,12 +99,12 @@ while [[ $# -gt 0 ]]; do
             ;;
         -l|--list)
             echo "Available indices:"
-            curl -s -k -u "$ELASTIC_USER:$ELASTIC_PASSWORD" "$ELASTIC_HOST/_cat/indices?v" | awk 'NR>1 {print $3}' | sort
+            es_curl "$ELASTIC_USER" "$ELASTIC_PASSWORD" "$ELASTIC_HOST/_cat/indices?v" | awk 'NR>1 {print $3}' | sort
             exit 0
             ;;
         -s|--status)
             echo "Current status of all indices:"
-            curl -s -k -u "$ELASTIC_USER:$ELASTIC_PASSWORD" "$ELASTIC_HOST/_cat/indices?v"
+            es_curl "$ELASTIC_USER" "$ELASTIC_PASSWORD" "$ELASTIC_HOST/_cat/indices?v"
             exit 0
             ;;
         -f|--force-merge)
@@ -149,7 +151,7 @@ if [ "$CHECK_SETTINGS" = true ]; then
         echo "▶ Index: $INDEX"
         echo "------------------------------------------"
 
-        SETTINGS=$(curl -s -k -u "$ELASTIC_USER:$ELASTIC_PASSWORD" \
+        SETTINGS=$(es_curl "$ELASTIC_USER" "$ELASTIC_PASSWORD" \
             "$ELASTIC_HOST/$INDEX/_settings?flat_settings=true&pretty")
 
         if echo "$SETTINGS" | grep -q '"error"'; then
@@ -176,7 +178,7 @@ if [ "$CHECK_SETTINGS" = true ]; then
             echo "  created_at         : $CREATED"
         fi
 
-        FIELD_COUNT=$(curl -s -k -u "$ELASTIC_USER:$ELASTIC_PASSWORD" \
+        FIELD_COUNT=$(es_curl "$ELASTIC_USER" "$ELASTIC_PASSWORD" \
             "$ELASTIC_HOST/$INDEX/_mapping?pretty" | grep '"type"' | wc -l | tr -d ' ')
         echo "  mapped fields      : ~${FIELD_COUNT}"
         echo "---"
@@ -222,7 +224,7 @@ if [ -n "$UPDATE_LIMIT" ]; then
     for INDEX in "${INDEX_NAMES[@]}"; do
         echo "Updating settings: $INDEX"
 
-        RESPONSE=$(curl -s -k -u "$ELASTIC_USER:$ELASTIC_PASSWORD" \
+        RESPONSE=$(es_curl "$ELASTIC_USER" "$ELASTIC_PASSWORD" \
             -X PUT "$ELASTIC_HOST/$INDEX/_settings" \
             -H "Content-Type: application/json" \
             -d "{\"index.mapping.total_fields.limit\": $UPDATE_LIMIT}")
@@ -289,7 +291,7 @@ if [ "$DELETE_INDEX" = true ]; then
     for INDEX in "${INDEX_NAMES[@]}"; do
         echo "Deleting index: $INDEX"
         
-        RESPONSE=$(curl -s -k -u "$ELASTIC_USER:$ELASTIC_PASSWORD" \
+        RESPONSE=$(es_curl "$ELASTIC_USER" "$ELASTIC_PASSWORD" \
             -X DELETE "$ELASTIC_HOST/$INDEX" \
             -H "Content-Type: application/json")
         
@@ -383,7 +385,7 @@ for INDEX in "${INDEX_NAMES[@]}"; do
     }'
     
     echo "Deleting old documents from $INDEX..."
-    RESPONSE=$(curl -s -k -u "$ELASTIC_USER:$ELASTIC_PASSWORD" \
+    RESPONSE=$(es_curl "$ELASTIC_USER" "$ELASTIC_PASSWORD" \
         -X POST "$ELASTIC_HOST/$INDEX/_delete_by_query" \
         -H "Content-Type: application/json" \
         -d "$DELETE_QUERY")
@@ -400,7 +402,7 @@ for INDEX in "${INDEX_NAMES[@]}"; do
     # Force merge if requested
     if [ "$FORCE_MERGE" = true ]; then
         echo "Force merging index: $INDEX..."
-        MERGE_RESPONSE=$(curl -s -k -u "$ELASTIC_USER:$ELASTIC_PASSWORD" \
+        MERGE_RESPONSE=$(es_curl "$ELASTIC_USER" "$ELASTIC_PASSWORD" \
             -X POST "$ELASTIC_HOST/$INDEX/_forcemerge?only_expunge_deletes=true" \
             -H "Content-Type: application/json")
         
