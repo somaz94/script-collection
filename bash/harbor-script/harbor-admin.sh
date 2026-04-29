@@ -342,6 +342,103 @@ for k in keys:
 print(f'{\"oidc_client_secret\":22s} = *** (write-only)')"
 }
 
+cmd_set_oidc() {
+  # set-oidc --name X --endpoint Y --client-id Z --client-secret W [...]
+  local name="" endpoint="" client_id="" client_secret=""
+  local verify_cert=""
+  local groups_claim="groups"
+  local group_filter="server"
+  local user_claim="preferred_username"
+  local admin_group=""
+  local scope="openid,profile,email"
+  local auto_onboard="true"
+  local dry_run=0 no_confirm=0
+
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --name)            name="$2"; shift 2 ;;
+      --endpoint)        endpoint="$2"; shift 2 ;;
+      --client-id)       client_id="$2"; shift 2 ;;
+      --client-secret)   client_secret="$2"; shift 2 ;;
+      --verify-cert)     verify_cert="$2"; shift 2 ;;
+      --groups-claim)    groups_claim="$2"; shift 2 ;;
+      --group-filter)    group_filter="$2"; shift 2 ;;
+      --user-claim)      user_claim="$2"; shift 2 ;;
+      --admin-group)     admin_group="$2"; shift 2 ;;
+      --scope)           scope="$2"; shift 2 ;;
+      --auto-onboard)    auto_onboard="$2"; shift 2 ;;
+      --dry-run)         dry_run=1; shift ;;
+      -y|--no-confirm)   no_confirm=1; shift ;;
+      *)                 _die "unknown option: $1" ;;
+    esac
+  done
+
+  [ -n "$client_secret" ] || client_secret="${HARBOR_OIDC_CLIENT_SECRET:-}"
+
+  [ -n "$name" ]          || _die "--name required"
+  [ -n "$endpoint" ]      || _die "--endpoint required"
+  [ -n "$client_id" ]     || _die "--client-id required"
+  [ -n "$client_secret" ] || _die "--client-secret required (or set HARBOR_OIDC_CLIENT_SECRET)"
+
+  if [ -z "$verify_cert" ]; then
+    case "$endpoint" in
+      https://*) verify_cert="true" ;;
+      *)         verify_cert="false" ;;
+    esac
+  fi
+  case "$verify_cert" in true|false) ;; *) _die "--verify-cert must be true|false";; esac
+  case "$auto_onboard" in true|false) ;; *) _die "--auto-onboard must be true|false";; esac
+
+  local body
+  body=$(NAME="$name" ENDPOINT="$endpoint" CID="$client_id" CSEC="$client_secret" \
+         GCLAIM="$groups_claim" AGRP="$admin_group" GFILT="$group_filter" \
+         SCOPE="$scope" UCLAIM="$user_claim" VCERT="$verify_cert" AUTO="$auto_onboard" \
+         python3 -c '
+import json, os
+v = lambda s: True if s == "true" else False
+print(json.dumps({
+  "oidc_name": os.environ["NAME"],
+  "oidc_endpoint": os.environ["ENDPOINT"],
+  "oidc_client_id": os.environ["CID"],
+  "oidc_client_secret": os.environ["CSEC"],
+  "oidc_groups_claim": os.environ["GCLAIM"],
+  "oidc_admin_group": os.environ["AGRP"],
+  "oidc_group_filter": os.environ["GFILT"],
+  "oidc_scope": os.environ["SCOPE"],
+  "oidc_user_claim": os.environ["UCLAIM"],
+  "oidc_verify_cert": v(os.environ["VCERT"]),
+  "oidc_auto_onboard": v(os.environ["AUTO"]),
+}))')
+
+  _info "target: ${HARBOR_URL}/api/v2.0/configurations"
+  echo "$body" | python3 -c "
+import json, sys
+d = json.loads(sys.stdin.read())
+d['oidc_client_secret'] = '***' if d.get('oidc_client_secret') else ''
+print(json.dumps(d, indent=2))" >&2
+
+  if [ "$dry_run" -eq 1 ]; then
+    _ok "DRY RUN — skipping PUT"
+    return 0
+  fi
+
+  if [ "$no_confirm" -eq 0 ]; then
+    printf '%s' "${YELLOW}Continue? [y/N]: ${NC}" >&2
+    local reply
+    read -r reply
+    case "$reply" in
+      y|Y|yes|YES) ;;
+      *) _info "cancelled"; exit 0 ;;
+    esac
+  fi
+
+  local resp code
+  resp=$(api_status PUT "/api/v2.0/configurations" "$body")
+  code=$(echo "$resp" | head -1)
+  [ "$code" = "200" ] || _die "OIDC update failed (HTTP $code): $(echo "$resp" | tail -n +2)"
+  _ok "OIDC config updated. Run 'config' to verify"
+}
+
 cmd_systeminfo() {
   # /systeminfo is public (no auth required) — drop basic auth
   local -a opts=(-sk)
@@ -380,16 +477,25 @@ ${BOLD}OIDC groups${NC}
   groups                          List user groups
   add-group <oidc-group-name>     Register an OIDC group (type=3)
 
+${BOLD}OIDC config update${NC}
+  set-oidc --name N --endpoint E --client-id ID --client-secret S [opts]
+                                  PUT OIDC settings (supports --dry-run / -y).
+                                  optional: --verify-cert true|false (auto-true on https),
+                                            --groups-claim, --group-filter, --user-claim,
+                                            --admin-group, --scope, --auto-onboard true|false.
+                                  client-secret may be set via HARBOR_OIDC_CLIENT_SECRET env.
+
 ${BOLD}Diagnostics${NC}
   config                          Dump OIDC-related configuration
   systeminfo                      Public systeminfo (auth_mode etc.)
 
 ${BOLD}Environment${NC}
-  HARBOR_URL              default ${HARBOR_URL}
-  HARBOR_IP               default ${HARBOR_IP} (used for --resolve)
-  HARBOR_ADMIN            default ${HARBOR_ADMIN}
-  HARBOR_ADMIN_PASSWORD   default reads from ../values/mgmt.yaml
-  HARBOR_NO_RESOLVE=1     use OS DNS instead of --resolve
+  HARBOR_URL                  default ${HARBOR_URL}
+  HARBOR_IP                   default ${HARBOR_IP} (used for --resolve)
+  HARBOR_ADMIN                default ${HARBOR_ADMIN}
+  HARBOR_ADMIN_PASSWORD       default reads from ../values/mgmt.yaml
+  HARBOR_OIDC_CLIENT_SECRET   alternative to --client-secret on set-oidc
+  HARBOR_NO_RESOLVE=1         use OS DNS instead of --resolve
 
 ${BOLD}Examples${NC}
   $(basename "$0") users
@@ -397,6 +503,14 @@ ${BOLD}Examples${NC}
   $(basename "$0") add-member library admin@example.com maintainer
   $(basename "$0") add-member example-project group:server developer
   $(basename "$0") add-group server
+  # Switch to Keycloak (Phase 4)
+  $(basename "$0") set-oidc --name Keycloak \\
+    --endpoint https://auth.example.com/realms/user \\
+    --client-id harbor --client-secret 'XXXX' --dry-run
+  # Rollback to GitLab
+  $(basename "$0") set-oidc --name GitLab \\
+    --endpoint http://gitlab.example.com \\
+    --client-id 'GL_APP_ID' --client-secret 'GL_SECRET' --verify-cert false
 EOF
   exit "${1:-0}"
 }
@@ -419,6 +533,7 @@ main() {
     groups)               cmd_groups ;;
     add-group)            [ $# -ge 1 ] || _die "add-group <oidc-group-name>"; cmd_add_group "$1" ;;
     config)               cmd_config ;;
+    set-oidc)             cmd_set_oidc "$@" ;;
     systeminfo)           cmd_systeminfo ;;
     *)                    echo "unknown command: $cmd" >&2; usage 1 ;;
   esac
