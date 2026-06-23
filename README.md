@@ -47,6 +47,7 @@ This repository contains a comprehensive collection of scripts for managing vari
 ### Python Scripts (`/python`)
 - `db-script/` - Database management utilities
 - `elastic-script/` - Elasticsearch management utilities
+- `git-script/` - GitHub automation utilities (secrets manager, Dependabot PR bulk merger)
 - `gitlab-script/` - GitLab automation utilities
 - `gpu-script/` - GPU management utilities
 - `linux-script/` - Linux system management utilities
