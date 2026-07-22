@@ -1,30 +1,12 @@
 #!/bin/bash
 
-version=16.3.4-ce.0  # write your update version
+set -euo pipefail # stop fail
 
-# # Create backup (optional)
-# echo "Creating backup before upgrade..."
-# sudo gitlab-rake gitlab:backup:create
-
-# Check current version
-echo "Current GitLab version"
-sudo gitlab-rake gitlab:env:info
+version=19.1.2-ce.0
 
 echo "Upgrading to GitLab $version"
-sudo apt update
-sudo apt-get install -y gitlab-ce=$version
-sleep 10
-sudo gitlab-ctl reconfigure
-sleep 10
-sudo gitlab-ctl restart
-sleep 10
-
-# Check status after upgrade
-echo "Checking GitLab status..."
-sudo gitlab-ctl status
-
-# Check version after upgrade
-echo "New GitLab version"
-sudo gitlab-rake gitlab:env:info
-
-echo "Upgrade completed"
+apt-get update
+apt-get install -y gitlab-ce=$version
+gitlab-ctl reconfigure     
+gitlab-ctl restart
+gitlab-ctl status
