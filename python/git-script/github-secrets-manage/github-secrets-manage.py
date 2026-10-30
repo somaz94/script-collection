@@ -154,7 +154,7 @@ class GitHubClient:
             )
             time.sleep(wait)
 
-    def list_repos(self, org: str) -> list[str]:
+    def list_repos(self, org: str, include_forks: bool = False) -> list[str]:
         repos: list[str] = []
         page = 1
         while True:
@@ -173,7 +173,11 @@ class GitHubClient:
             data = resp.json()
             if not data:
                 break
-            repos.extend(r["name"] for r in data if not r.get("archived", False))
+            repos.extend(
+                r["name"] for r in data
+                if not r.get("archived", False)
+                and (include_forks or not r.get("fork", False))
+            )
             logging.info(f"  Page {page}: {len(data)} repos (total {len(repos)})")
             page += 1
         return sorted(repos)
@@ -496,8 +500,9 @@ def _resolve_repos(client: GitHubClient, args: argparse.Namespace) -> list[str]:
     if args.repos:
         return [r.strip() for r in args.repos.split(",")]
     logging.info("Fetching repository list...")
-    repos = client.list_repos(args.org)
-    logging.info(f"Found {len(repos)} repositories (excluding archived)")
+    repos = client.list_repos(args.org, include_forks=args.include_forks)
+    excluded = "archived" if args.include_forks else "archived and forks"
+    logging.info(f"Found {len(repos)} repositories (excluding {excluded})")
     return repos
 
 
@@ -660,6 +665,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     common.add_argument(
         "--repos", help="Target specific repositories only (comma-separated, e.g. repo1,repo2)"
+    )
+    common.add_argument(
+        "--include-forks", action="store_true",
+        help="Include forked repositories (excluded by default)",
     )
     common.add_argument(
         "--dry-run", action="store_true", help="Simulate without making actual changes"

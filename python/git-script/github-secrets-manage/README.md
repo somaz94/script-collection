@@ -205,6 +205,12 @@ All commands support `--repos` to limit scope:
 python3 github-secrets-manage.py sync --org somaz94 --repos kube-diff,git-bridge
 ```
 
+Without `--repos`, archived and forked repositories are skipped. Pass `--include-forks` to include forks:
+
+```bash
+python3 github-secrets-manage.py list --org somaz94 --include-forks
+```
+
 <br/>
 
 ## Common Options
@@ -213,6 +219,7 @@ python3 github-secrets-manage.py sync --org somaz94 --repos kube-diff,git-bridge
 |------|-------------|
 | `--org` | GitHub organization or username (required) |
 | `--repos` | Comma-separated list of specific repositories |
+| `--include-forks` | Include forked repositories (excluded by default) |
 | `--target` | `actions`, `dependabot`, or `both` |
 | `--dry-run` | Preview changes without applying them |
 | `-y, --yes` | Skip confirmation prompts |

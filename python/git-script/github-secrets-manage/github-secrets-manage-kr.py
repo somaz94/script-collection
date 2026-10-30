@@ -154,7 +154,7 @@ class GitHubClient:
             )
             time.sleep(wait)
 
-    def list_repos(self, org: str) -> list[str]:
+    def list_repos(self, org: str, include_forks: bool = False) -> list[str]:
         repos: list[str] = []
         page = 1
         while True:
@@ -173,7 +173,11 @@ class GitHubClient:
             data = resp.json()
             if not data:
                 break
-            repos.extend(r["name"] for r in data if not r.get("archived", False))
+            repos.extend(
+                r["name"] for r in data
+                if not r.get("archived", False)
+                and (include_forks or not r.get("fork", False))
+            )
             logging.info(f"  페이지 {page}: {len(data)}개 (누적 {len(repos)}개)")
             page += 1
         return sorted(repos)
@@ -496,8 +500,9 @@ def _resolve_repos(client: GitHubClient, args: argparse.Namespace) -> list[str]:
     if args.repos:
         return [r.strip() for r in args.repos.split(",")]
     logging.info("리포지토리 목록 가져오는 중...")
-    repos = client.list_repos(args.org)
-    logging.info(f"총 {len(repos)}개 리포지토리 발견 (archived 제외)")
+    repos = client.list_repos(args.org, include_forks=args.include_forks)
+    excluded = "archived" if args.include_forks else "archived, fork"
+    logging.info(f"총 {len(repos)}개 리포지토리 발견 ({excluded} 제외)")
     return repos
 
 
@@ -659,6 +664,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     common.add_argument(
         "--repos", help="특정 리포지토리만 대상 (쉼표 구분, 예: repo1,repo2)"
+    )
+    common.add_argument(
+        "--include-forks", action="store_true",
+        help="fork 리포지토리도 포함 (기본값: 제외)",
     )
     common.add_argument(
         "--dry-run", action="store_true", help="실제 변경 없이 시뮬레이션"
