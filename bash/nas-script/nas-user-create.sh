@@ -2,11 +2,12 @@
 set -euo pipefail
 IFS=$'\n\t'
 
-# -h/--help guard — running without args immediately tries NAS auth
-case "${1:-}" in
-  -h|--help)
-    cat <<USAGE
-Usage: ./${0##*/} [-h | --help]
+DRY_RUN=0
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -h|--help)
+      cat <<USAGE
+Usage: ./${0##*/} [--dry-run] [-h | --help]
 
   Create users on a Synology NAS and grant group/shared-folder permissions.
 
@@ -15,16 +16,27 @@ Usage: ./${0##*/} [-h | --help]
   Description : DESCRIPTION variable at the top
 
 Options:
+  --dry-run     Skip the mutating POST (user create) + synogroup ssh commands;
+                authentication sessions + read-only lookups still run.
   -h, --help    Show this help and exit
 
 Flow:
   1) Query NAS API info -> authenticate FileStation + Core sessions
   2) Iterate USERNAMES: create user, add to group, grant share permissions
 USAGE
-    exit 0
-    ;;
-esac
+      exit 0
+      ;;
+    --dry-run) DRY_RUN=1; shift ;;
+    --) shift; break ;;
+    -*) echo "ERROR: unknown option: $1" >&2; exit 2 ;;
+    *)  break ;;
+  esac
+done
 
+# Resolve script path portably across bash and zsh (BASH_SOURCE → $0 fallback).
+_SCRIPT_PATH="${BASH_SOURCE[0]:-$0}"
+SCRIPT_DIR="$(cd "$(dirname "$_SCRIPT_PATH")" && pwd)"
+unset _SCRIPT_PATH
 # --- Inline NAS config (was nas.conf in the source repo) ---
 NAS_IP="192.0.2.5"
 NAS_URL="http://${NAS_IP}:5000"
@@ -43,24 +55,15 @@ DEFAULT_PASSWORD="CHANGE_ME"
 # Per-user description (varies between users → kept in wrapper)
 DESCRIPTION="server_user"
 
-# List of users to be created
-# Add or remove usernames as needed
 USERNAMES=(
   example_user
 )
 
-# Initialize API Information
-# -------------------------
-# Retrieve API information for required Synology APIs
-# This step is necessary to ensure all required APIs are available
 echo "▸ Getting API Info..."
 API_INFO=$(curl -s -X GET "$NAS_URL/webapi/entry.cgi?api=SYNO.API.Info&version=1&method=query&query=SYNO.API.Auth,SYNO.Core.User,SYNO.Core.Group,SYNO.Core.Share,SYNO.FileStation.List,SYNO.FileStation.Sharing")
 echo "API Info Response: $API_INFO"
 
-# Authentication - FileStation Session
-# -----------------------------------
-# First authentication session for FileStation operations
-# This session is required for file system related operations
+# FileStation and Core APIs need separate sessions.
 echo "▸ Attempting to authenticate with NAS (FileStation session)..."
 AUTH_RESPONSE=$(curl -s -X POST "$NAS_URL/webapi/entry.cgi" \
   --data-urlencode "api=SYNO.API.Auth" \
@@ -73,10 +76,8 @@ AUTH_RESPONSE=$(curl -s -X POST "$NAS_URL/webapi/entry.cgi" \
 
 echo "Auth Response: $AUTH_RESPONSE"
 
-# Extract Session ID (SID) from authentication response
 SID=$(echo $AUTH_RESPONSE | jq -r '.data.sid')
 
-# Validate FileStation authentication
 if [ -z "$SID" ] || [ "$SID" = "null" ]; then
     echo "✗ Failed to authenticate with NAS"
     echo "Error details:"
@@ -87,10 +88,6 @@ fi
 echo "✔ Successfully authenticated with NAS (FileStation session)"
 echo "----------------------------------------"
 
-# Authentication - Core Session
-# ----------------------------
-# Second authentication session for core operations
-# This session is required for user and group management
 echo "▸ Attempting to authenticate with NAS (Core session)..."
 CORE_AUTH_RESPONSE=$(curl -s -X POST "$NAS_URL/webapi/entry.cgi" \
   --data-urlencode "api=SYNO.API.Auth" \
@@ -103,10 +100,8 @@ CORE_AUTH_RESPONSE=$(curl -s -X POST "$NAS_URL/webapi/entry.cgi" \
 
 echo "Core Auth Response: $CORE_AUTH_RESPONSE"
 
-# Extract Core Session ID
 CORE_SID=$(echo $CORE_AUTH_RESPONSE | jq -r '.data.sid')
 
-# Validate Core authentication
 if [ -z "$CORE_SID" ] || [ "$CORE_SID" = "null" ]; then
     echo "✗ Failed to authenticate with NAS (Core session)"
     echo "Error details:"
@@ -117,10 +112,6 @@ fi
 echo "✔ Successfully authenticated with NAS (Core session)"
 echo "----------------------------------------"
 
-# Group Information Retrieval
-# --------------------------
-# Get information about existing groups
-# This is used to verify group existence and permissions
 echo "▸ Getting group info..."
 GROUP_INFO=$(curl -s -X POST "$NAS_URL/webapi/entry.cgi" \
   --data-urlencode "api=SYNO.Core.Group" \
@@ -129,10 +120,6 @@ GROUP_INFO=$(curl -s -X POST "$NAS_URL/webapi/entry.cgi" \
   --data-urlencode "_sid=$CORE_SID")
 echo "Group Info: $GROUP_INFO"
 
-# Share Folder Information
-# -----------------------
-# Get information about shared folders
-# This is used to verify share permissions and access
 echo "▸ Getting share folder info..."
 SHARE_INFO=$(curl -s -X POST "$NAS_URL/webapi/entry.cgi" \
   --data-urlencode "api=SYNO.Core.Share" \
@@ -141,15 +128,9 @@ SHARE_INFO=$(curl -s -X POST "$NAS_URL/webapi/entry.cgi" \
   --data-urlencode "_sid=$CORE_SID")
 echo "Share Info: $SHARE_INFO"
 
-# User Creation Loop
-# ----------------
-# Process each username in the USERNAMES array
 for USERNAME in "${USERNAMES[@]}"; do
-  # Generate email address for the user
   EMAIL="${USERNAME}@${EMAIL_DOMAIN}"
 
-  # Check for existing user
-  # Prevents duplicate user creation
   EXISTING_USER=$(curl -s -X GET "$NAS_URL/webapi/entry.cgi" \
     --data-urlencode "api=SYNO.Core.User" \
     --data-urlencode "version=1" \
@@ -157,7 +138,6 @@ for USERNAME in "${USERNAMES[@]}"; do
     --data-urlencode "name=$USERNAME" \
     --data-urlencode "_sid=$CORE_SID" | jq '.data')
   
-  # Skip if user already exists
   if [ "$EXISTING_USER" != "null" ]; then
     echo "▲  User '$USERNAME' already exists!"
     echo "----------------------------------------"
@@ -165,9 +145,15 @@ for USERNAME in "${USERNAMES[@]}"; do
   fi
 
   echo "▸ Creating user: $USERNAME ($EMAIL)"
-  
-  # Create new user
-  # Sets up basic user account with email and description
+
+  if [[ "$DRY_RUN" == "1" ]]; then
+    echo "    (dry-run) POST $NAS_URL/webapi/entry.cgi api=SYNO.Core.User method=create name=$USERNAME email=$EMAIL"
+    echo "    (dry-run) ssh $ADMIN_USERNAME@$NAS_IP synogroup --memberadd '$GROUP_NAME' '$USERNAME'"
+    echo "✔ (dry-run) plan for '$USERNAME' printed"
+    echo "----------------------------------------"
+    continue
+  fi
+
   CREATE_RESPONSE=$(curl -s -X POST "$NAS_URL/webapi/entry.cgi" \
     --data-urlencode "api=SYNO.Core.User" \
     --data-urlencode "version=1" \
@@ -178,32 +164,22 @@ for USERNAME in "${USERNAMES[@]}"; do
     --data-urlencode "description=$DESCRIPTION" \
     --data-urlencode "_sid=$CORE_SID")
 
-  # Verify user creation success
   if echo "$CREATE_RESPONSE" | jq -e '.success == true' >/dev/null; then
     echo "✔ User '$USERNAME' created successfully"
 
-    # Wait for user creation to complete
-    # This ensures all user data is properly initialized
     echo "▸ Waiting for user creation to complete..."
     sleep 2
 
-    # Group Membership Management
-    # --------------------------
-    # Add user to specified group using synogroup command
     echo "▸ Adding '$USERNAME' to group '$GROUP_NAME'"
     
-    # Execute synogroup command with sudo privileges
     echo "▸ Executing synogroup command..."
     GROUP_RESPONSE=$(sshpass -p "$ADMIN_PASSWORD" ssh $ADMIN_USERNAME@$NAS_IP "echo '$ADMIN_PASSWORD' | sudo -S /usr/syno/sbin/synogroup --memberadd '$GROUP_NAME' '$USERNAME'")
     
     echo "Group update response: $GROUP_RESPONSE"
     
-    # Verify group membership
-    # Ensures user was successfully added to the group
     echo "▸ Verifying group membership..."
     VERIFY_RESPONSE=$(sshpass -p "$ADMIN_PASSWORD" ssh $ADMIN_USERNAME@$NAS_IP "echo '$ADMIN_PASSWORD' | sudo -S /usr/syno/sbin/synogroup --get '$GROUP_NAME' | grep '$USERNAME'")
     
-    # Check group membership status
     if [ -n "$VERIFY_RESPONSE" ]; then
       echo "✔ User '$USERNAME' added to group '$GROUP_NAME'"
       echo "▸ Group members from synogroup command:"
@@ -224,10 +200,6 @@ for USERNAME in "${USERNAMES[@]}"; do
   echo "----------------------------------------"
 done
 
-# Session Cleanup
-# -------------
-# Logout from both FileStation and Core sessions
-# This ensures proper cleanup of authentication sessions
 curl -s -X POST "$NAS_URL/webapi/entry.cgi" \
   --data-urlencode "api=SYNO.API.Auth" \
   --data-urlencode "version=7" \

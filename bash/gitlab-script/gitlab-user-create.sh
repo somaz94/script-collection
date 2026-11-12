@@ -2,11 +2,12 @@
 set -euo pipefail
 IFS=$'\n\t'
 
-# -h/--help guard — running without args immediately calls the GitLab API
-case "${1:-}" in
-  -h|--help)
-    cat <<USAGE
-Usage: ./${0##*/} [-h | --help]
+DRY_RUN=0
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -h|--help)
+      cat <<USAGE
+Usage: ./${0##*/} [--dry-run] [-h | --help]
 
   Create users on the new GitLab instance and add them to GROUP_NAME.
 
@@ -14,43 +15,41 @@ Usage: ./${0##*/} [-h | --help]
   Server config: GITLAB_URL, PRIVATE_TOKEN, DEFAULT_PASSWORD, EMAIL_DOMAIN, GROUP_NAME (top of script)
 
 Options:
+  --dry-run     Skip the mutating POST /users + POST /groups/<id>/members
+                calls; read-only group/user lookups still run.
   -h, --help    Show this help and exit
 
 Flow:
   1) Resolve GROUP_NAME -> group ID via GitLab API
   2) Iterate USERNAMES: create user, then add as group member
 USAGE
-    exit 0
-    ;;
-esac
+      exit 0
+      ;;
+    --dry-run) DRY_RUN=1; shift ;;
+    --) shift; break ;;
+    -*) echo "ERROR: unknown option: $1" >&2; exit 2 ;;
+    *)  break ;;
+  esac
+done
 
-# GitLab Configuration Variables
-# ---------------------------
-# GITLAB_URL: Base URL of your GitLab instance
-# PRIVATE_TOKEN: GitLab API access token with admin privileges
-# DEFAULT_PASSWORD: Initial password for new users
-# EMAIL_DOMAIN: Domain for user email addresses
-# GROUP_NAME: Target group name for user membership
 GITLAB_URL="http://gitlab.example.com"
-PRIVATE_TOKEN="<your-gitlab-token>"
+# 🔴 Supplied through the environment, never committed. The token this script
+# needs is the instance-level `cicd` service-account PAT, which carries
+# admin_mode + sudo — it can act as any user on the instance. It sat here as a
+# literal from 2026-03-23 until 2026-08-10, readable by anyone with read access
+# to this repo, and has to be treated as compromised for that whole window.
+PRIVATE_TOKEN="${PRIVATE_TOKEN:?PRIVATE_TOKEN is required — export the GitLab admin PAT before running}"
 DEFAULT_PASSWORD="CHANGE_ME"
 EMAIL_DOMAIN="example.com"
 GROUP_NAME="server"
 
-# List of users to be created
-# Add or remove usernames as needed
 USERNAMES=(
   sunddu
 )
 
-# Group Information Retrieval
-# -------------------------
-# Get the group ID using the group name
-# This ID is required for adding users to the group
 GROUP_RESPONSE=$(curl -s --header "PRIVATE-TOKEN: $PRIVATE_TOKEN" "$GITLAB_URL/api/v4/groups?search=$GROUP_NAME")
 GROUP_ID=$(echo "$GROUP_RESPONSE" | jq ".[0].id")
 
-# Check for API errors or if group not found
 if [[ "$GROUP_ID" == "null" || -z "$GROUP_ID" ]]; then
   echo "✗ Error: Could not retrieve Group ID for '$GROUP_NAME'."
   echo "   GitLab API Response: $GROUP_RESPONSE"
@@ -61,23 +60,15 @@ fi
 echo "✔ Found Group '$GROUP_NAME' with ID: $GROUP_ID"
 echo "----------------------------------------"
 
-# User Creation Loop
-# ----------------
-# Process each username in the USERNAMES array
 for USERNAME in "${USERNAMES[@]}"; do
-  # Generate email address for the user
   EMAIL="${USERNAME}@${EMAIL_DOMAIN}"
-  # Set display name (using username as default)
   NAME="$USERNAME"
 
-  # Check for existing user
-  # Prevents duplicate user creation
   EXISTING_USER_RESPONSE=$(curl -s --header "PRIVATE-TOKEN: $PRIVATE_TOKEN" "$GITLAB_URL/api/v4/users?username=$USERNAME")
   
   # jq returns "null" if user doesn't exist, or an empty string if there's an API error.
   EXISTING_USER_ID=$(echo "$EXISTING_USER_RESPONSE" | jq '.[0].id')
   
-  # Skip if user already exists
   if [[ "$EXISTING_USER_ID" != "null" && -n "$EXISTING_USER_ID" ]]; then
     echo "▲  User '$USERNAME' already exists with ID: $EXISTING_USER_ID"
     echo "----------------------------------------"
@@ -90,17 +81,20 @@ for USERNAME in "${USERNAMES[@]}"; do
     continue
   fi
 
-  # User Creation
-  # ------------
-  # Create new user with specified parameters
   # skip_confirmation=true allows immediate access without email verification
   echo "▸ Creating user: $USERNAME ($EMAIL)"
+  if [[ "$DRY_RUN" == "1" ]]; then
+    echo "    (dry-run) POST $GITLAB_URL/api/v4/users (email=$EMAIL, username=$USERNAME, name=$NAME, skip_confirmation=true)"
+    echo "    (dry-run) POST $GITLAB_URL/api/v4/groups/$GROUP_ID/members (user_id=<new>, access_level=40)"
+    echo "✔ (dry-run) plan for '$USERNAME' printed"
+    echo "----------------------------------------"
+    continue
+  fi
   USER_ID=$(curl -s --request POST "$GITLAB_URL/api/v4/users" \
     --header "PRIVATE-TOKEN: $PRIVATE_TOKEN" \
     --data "email=$EMAIL&username=$USERNAME&name=$NAME&password=$DEFAULT_PASSWORD&skip_confirmation=true" \
     | jq '.id')
 
-  # Verify user creation success
   if [ "$USER_ID" = "null" ]; then
     echo "✗ Failed to create user '$USERNAME'"
     echo "----------------------------------------"
@@ -109,16 +103,11 @@ for USERNAME in "${USERNAMES[@]}"; do
 
   echo "✔ User '$USERNAME' created with ID: $USER_ID"
 
-  # Group Membership Management
-  # --------------------------
-  # Add user to specified group with Maintainer access level
-  # Access levels:
-  # - 40: Maintainer
-  # - 30: Developer
+  # access_level 40 = Maintainer (30 = Developer).
   echo "▸ Adding '$USERNAME' to group '$GROUP_NAME'"
   curl -s --request POST "$GITLAB_URL/api/v4/groups/$GROUP_ID/members" \
     --header "PRIVATE-TOKEN: $PRIVATE_TOKEN" \
-    --data "user_id=$USER_ID&access_level=40" # Maintainer access level=30 Developer access level=40 Maintainer
+    --data "user_id=$USER_ID&access_level=40"
 
   echo "✔ Done for $USERNAME"
   echo ""

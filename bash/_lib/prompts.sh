@@ -1,30 +1,24 @@
+# shellcheck shell=bash
 # =============================================================================
-# scripts/lib/prompts.sh — 공용 프롬프트/검증 유틸리티
+# scripts/lib/prompts.sh — Shared prompt + validation utilities
 # =============================================================================
-# scripts/ 하위 bash 스크립트들이 공유하는 helper 함수 모음.
-# - confirm_yes_no:    y/N 확인 프롬프트 (기본 N)
-# - confirm_typed_word: 특정 단어를 정확히 입력해야 통과하는 확인 프롬프트
-# - require_commands:  필수 명령어 일괄 존재 확인
-# - format_human_size: 바이트 → 사람이 읽기 쉬운 크기 문자열
+# Usage:
+#   source "$(dirname "${BASH_SOURCE[0]}")/<relative-path>/lib/prompts.sh"
 #
-# 사용:
-#   source "$(dirname "${BASH_SOURCE[0]}")/<상대경로>/lib/prompts.sh"
-#
-# colors.sh 와 함께 source 하면 색상 변수 (YELLOW/RED/NC 등) 가 사용됨.
-# colors.sh 가 없어도 동작하도록 변수 미정의시 빈 문자열로 처리.
-#
-# 멱등성을 위해 가드 처리 — 한 스크립트에서 여러 모듈이 source 해도 안전.
+# Idempotent guard — safe to source multiple times from the same script.
+# Default prompt strings are Korean last-resort fallbacks; every caller
+# passes its own message.
 # =============================================================================
 
 [[ -n "${__SCRIPTS_LIB_PROMPTS_LOADED:-}" ]] && return 0
 __SCRIPTS_LIB_PROMPTS_LOADED=1
 
-# colors.sh 미로딩시 빈 문자열로 fallback
+# colors.sh fallback — empty strings when not loaded
 : "${YELLOW:=}" "${RED:=}" "${GREEN:=}" "${NC:=}"
 
-# 사용자에게 y/N 확인을 요청. 기본값은 No.
-# 인자: $1 = 표시할 메시지 (예: "정말 삭제하시겠습니까?")
-# 반환: 0 = yes, 1 = no/취소
+# y/N confirmation prompt. Default answer is No.
+# Args:    $1 = message to display (e.g., "Really delete?")
+# Returns: 0 = yes, 1 = no/cancel
 confirm_yes_no() {
   local message="${1:-계속하시겠습니까?}"
   local reply
@@ -33,10 +27,10 @@ confirm_yes_no() {
   [[ "${reply}" =~ ^[Yy]$ ]]
 }
 
-# 특정 단어를 정확히 입력해야 통과하는 확인 프롬프트.
-# 되돌릴 수 없는 위험 작업에서 사용 (예: 인덱스 삭제).
-# 인자: $1 = 메시지, $2 = 입력해야 할 단어 (대소문자 구분)
-# 반환: 0 = 일치, 1 = 불일치
+# Confirmation prompt that requires the user to type an exact word.
+# Used for destructive operations (e.g., index deletion).
+# Args:    $1 = message, $2 = expected word (case-sensitive)
+# Returns: 0 = match, 1 = mismatch
 confirm_typed_word() {
   local message="${1:-계속하려면 정확히 입력하세요}"
   local expected="${2:-CONFIRM}"
@@ -46,9 +40,9 @@ confirm_typed_word() {
   [[ "${reply}" == "${expected}" ]]
 }
 
-# 필수 명령어 일괄 존재 확인.
-# 인자: 명령어 이름들을 가변 인자로
-# 동작: 누락된 명령이 있으면 stderr 로 안내 후 exit 1
+# Assert that every required command is present.
+# Args:    command names, variadic
+# Returns: 1 after listing the missing commands on stderr
 require_commands() {
   local missing=()
   local cmd
@@ -63,9 +57,9 @@ require_commands() {
   fi
 }
 
-# 바이트를 사람이 읽기 쉬운 단위로 변환 (B / KiB / MiB / GiB).
-# 인자: $1 = 바이트 (정수)
-# 출력: stdout 으로 변환된 문자열
+# Convert a byte count to a human-readable unit (B / KiB / MiB / GiB).
+# Args:    $1 = bytes (integer)
+# Output:  the converted string on stdout
 format_human_size() {
   local bytes="${1:-0}"
   if (( bytes >= 1073741824 )); then

@@ -1,4 +1,10 @@
 #!/usr/bin/env bash
+# bash + zsh compatible: re-exec under bash if invoked through zsh BEFORE
+# enabling shell options. The body uses `echo -e` and may source lib
+# helpers — both depend on bash semantics.
+if [ -n "${ZSH_VERSION:-}" ]; then
+  exec /usr/bin/env bash "$0" "$@"
+fi
 set -euo pipefail
 IFS=$'\n\t'
 
@@ -12,9 +18,13 @@ WORK_DIR="${WORK_DIR:-/tmp/gitlab-restore}"
 RCLONE_CONFIG="${RCLONE_CONFIG:-}"
 SELECT_MODE=false
 COMPARE_REPO=""
+DRY_RUN=0
 
 # Color variables — scripts/lib/colors.sh
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Resolve script path portably across bash and zsh (BASH_SOURCE → $0 fallback).
+_SCRIPT_PATH="${BASH_SOURCE[0]:-$0}"
+SCRIPT_DIR="$(cd "$(dirname "$_SCRIPT_PATH")" && pwd)"
+unset _SCRIPT_PATH
 # shellcheck disable=SC1091
 source "${SCRIPT_DIR}/../_lib/colors.sh"
 
@@ -27,6 +37,8 @@ usage() {
   echo "  -c, --config <path>       rclone config file path"
   echo "  -s, --select              select backup from list (default: latest)"
   echo "  -d, --diff <repo-path>    compare with local repo after restore"
+  echo "  --dry-run                 print the git push --force calls without executing them"
+  echo "                            (workdir mkdir / rm / tar, backup download and clone still run)"
   echo "  -h, --help                show this help"
   echo ""
   echo "Examples:"
@@ -40,7 +52,7 @@ usage() {
   echo "  $0 -s my-project"
   echo ""
   echo "  # Restore and compare with original repo"
-  echo "  $0 -d ~/gitlab-project/my-project my-project"
+  echo "  $0 -d gitlab-project/my-project my-project"
   echo ""
   echo "  # With custom remote, config, and work directory"
   echo "  $0 -r 'Gitlab Backup' -c ~/.config/rclone/rclone.conf -w /tmp/restore my-project"
@@ -50,7 +62,6 @@ usage() {
   exit 1
 }
 
-# Parse flags
 while [[ $# -gt 0 ]]; do
   case $1 in
     -r|--remote)    REMOTE="$2"; shift 2 ;;
@@ -58,6 +69,7 @@ while [[ $# -gt 0 ]]; do
     -c|--config)    RCLONE_CONFIG="$2"; shift 2 ;;
     -s|--select)    SELECT_MODE=true; shift ;;
     -d|--diff)      COMPARE_REPO="$2"; shift 2 ;;
+    --dry-run)      DRY_RUN=1; shift ;;
     -h|--help)      usage ;;
     -*)             echo -e "${RED}Unknown option: $1${NC}"; usage ;;
     *)              break ;;
@@ -71,19 +83,16 @@ if [ -z "$PROJECT_NAME" ]; then
   usage
 fi
 
-# Validate compare repo path
 if [ -n "$COMPARE_REPO" ] && [ ! -d "$COMPARE_REPO" ]; then
   echo -e "${RED}Compare repo not found: ${COMPARE_REPO}${NC}"
   exit 1
 fi
 
-# Build rclone config flag
 CONFIG_FLAG=""
 if [ -n "$RCLONE_CONFIG" ]; then
   CONFIG_FLAG="--config $RCLONE_CONFIG"
 fi
 
-# Create working directory
 mkdir -p "$WORK_DIR"
 
 echo -e "${GREEN}=== GitLab Source Restore ===${NC}"
@@ -94,7 +103,6 @@ echo "  Work Dir: ${WORK_DIR}"
 [ -n "$COMPARE_REPO" ] && echo "  Compare:  ${COMPARE_REPO}"
 echo ""
 
-# Step 1: List available backups (store in array)
 echo -e "${GREEN}[1/6] Listing backups${NC}"
 echo "---"
 
@@ -115,9 +123,7 @@ done
 TOTAL=${#BACKUPS[@]}
 echo "---"
 
-# Step 2: Select backup file
 if [ "$SELECT_MODE" = true ]; then
-  # Manual selection
   echo -e "${YELLOW}Select backup number to restore (1-${TOTAL}):${NC}"
   read -r SELECTION
 
@@ -135,15 +141,12 @@ fi
 
 echo -e "${GREEN}Selected: ${BACKUP_FILE}${NC}"
 
-# Step 3: Download backup file from Google Drive
 echo -e "${GREEN}[2/6] Downloading backup${NC}"
 rclone copy "${REMOTE}:${PROJECT_NAME}/${BACKUP_FILE}" "$WORK_DIR/" --progress $CONFIG_FLAG
 
-# Step 4: Extract archive
 echo -e "${GREEN}[3/6] Extracting archive${NC}"
 cd "$WORK_DIR"
 
-# Clean up previous repo.git if exists
 [ -d "repo.git" ] && rm -rf repo.git
 
 tar xzf "${BACKUP_FILE}"
@@ -158,9 +161,7 @@ git --git-dir=repo.git branch | sed 's/^/    /'
 echo "  Tags:"
 git --git-dir=repo.git tag | sed 's/^/    /'
 
-# Step 5: Restore
 if [ -n "$GITLAB_REPO_URL" ]; then
-  # Push to remote GitLab repo
   echo -e "${GREEN}[4/6] Restoring to remote repo: ${GITLAB_REPO_URL}${NC}"
   cd repo.git
 
@@ -171,8 +172,14 @@ if [ -n "$GITLAB_REPO_URL" ]; then
   done
 
   # Force push all branches + tags (instead of --mirror to avoid deleting remote-only branches)
-  git push --force --all "$GITLAB_REPO_URL" 2>&1 | tee /tmp/push-result.log || true
-  git push --force --tags "$GITLAB_REPO_URL" 2>&1 | tee -a /tmp/push-result.log || true
+  if [[ "$DRY_RUN" == "1" ]]; then
+    echo "    (dry-run) git push --force --all $GITLAB_REPO_URL"
+    echo "    (dry-run) git push --force --tags $GITLAB_REPO_URL"
+    : > /tmp/push-result.log
+  else
+    git push --force --all "$GITLAB_REPO_URL" 2>&1 | tee /tmp/push-result.log || true
+    git push --force --tags "$GITLAB_REPO_URL" 2>&1 | tee -a /tmp/push-result.log || true
+  fi
 
   if grep -q "remote rejected\|error:" /tmp/push-result.log; then
     UNEXPECTED_ERRORS=$(grep "remote rejected\|error:" /tmp/push-result.log \
@@ -194,7 +201,6 @@ if [ -n "$GITLAB_REPO_URL" ]; then
   fi
   echo -e "${GREEN}[5/6] Restore complete${NC}"
 
-  # Verify: compare remote repo with backup
   echo ""
   echo -e "${GREEN}[6/6] Comparing remote repo with backup${NC}"
   echo "---"
@@ -205,7 +211,6 @@ if [ -n "$GITLAB_REPO_URL" ]; then
 
   BACKUP_GIT="${WORK_DIR}/repo.git"
 
-  # Compare commits
   DIFF_RESULT=$(diff \
     <(git --git-dir="$VERIFY_DIR" log --all --format='%H' | sort) \
     <(git --git-dir="$BACKUP_GIT" log --all --format='%H' | sort) \
@@ -221,7 +226,6 @@ if [ -n "$GITLAB_REPO_URL" ]; then
     echo "    Only in backup: ${ONLY_IN_BACKUP} commit(s)"
   fi
 
-  # Compare branches
   BRANCH_DIFF=$(diff \
     <(git --git-dir="$VERIFY_DIR" branch | sed 's/^[* ]*//' | sort) \
     <(git --git-dir="$BACKUP_GIT" branch | sed 's/^[* ]*//' | sort) \
@@ -235,7 +239,6 @@ if [ -n "$GITLAB_REPO_URL" ]; then
     echo "$BRANCH_DIFF" | grep "^> " | sed 's/^> /    Only in backup: /'
   fi
 
-  # Compare tags
   TAG_DIFF=$(diff \
     <(git --git-dir="$VERIFY_DIR" tag | sort) \
     <(git --git-dir="$BACKUP_GIT" tag | sort) \
@@ -251,10 +254,8 @@ if [ -n "$GITLAB_REPO_URL" ]; then
 
   echo "---"
 
-  # Clean up verification clone
   rm -rf "$VERIFY_DIR"
 else
-  # Clone to local directory
   LOCAL_DIR="${WORK_DIR}/${PROJECT_NAME}"
   [ -d "$LOCAL_DIR" ] && rm -rf "$LOCAL_DIR"
   echo -e "${GREEN}[4/6] Restoring to local: ${LOCAL_DIR}${NC}"
@@ -264,7 +265,6 @@ else
   echo -e "Working directory: ${YELLOW}${LOCAL_DIR}${NC}"
 fi
 
-# Step 6: Compare with original repo
 if [ -n "$COMPARE_REPO" ]; then
   echo ""
   echo -e "${GREEN}[6/6] Comparing with: ${COMPARE_REPO}${NC}"
@@ -272,7 +272,6 @@ if [ -n "$COMPARE_REPO" ]; then
 
   RESTORE_GIT="${WORK_DIR}/repo.git"
 
-  # Compare commits
   DIFF_RESULT=$(diff \
     <(cd "$COMPARE_REPO" && git log --all --format='%H' | sort) \
     <(git --git-dir="$RESTORE_GIT" log --all --format='%H' | sort) \
@@ -299,7 +298,6 @@ if [ -n "$COMPARE_REPO" ]; then
     fi
   fi
 
-  # Compare branches
   BRANCH_DIFF=$(diff \
     <(cd "$COMPARE_REPO" && git branch -r 2>/dev/null | sed 's/^ *//' | grep -v HEAD | sort) \
     <(git --git-dir="$RESTORE_GIT" branch | sed 's/^ *//' | sort) \
@@ -313,7 +311,6 @@ if [ -n "$COMPARE_REPO" ]; then
     echo "$BRANCH_DIFF" | grep "^> " | sed 's/^> /    Only in backup:   /'
   fi
 
-  # Compare tags
   TAG_DIFF=$(diff \
     <(cd "$COMPARE_REPO" && git tag | sort) \
     <(git --git-dir="$RESTORE_GIT" tag | sort) \

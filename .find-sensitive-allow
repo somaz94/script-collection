@@ -1,0 +1,5 @@
+# find-sensitive.sh allowlist — reviewed 2026-11-12.
+# Every entry names a Kubernetes object or a placeholder, never a credential value.
+# Format: <relative path><TAB><exact line text>. A new value in the same file is still reported.
+
+bash/elastic-script/kibana_saved_objects_migrate.sh	echo "  secret: monitoring/elasticsearch-master-credentials"

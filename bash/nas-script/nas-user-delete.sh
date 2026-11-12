@@ -2,11 +2,12 @@
 set -euo pipefail
 IFS=$'\n\t'
 
-# -h/--help guard — running without args immediately tries NAS auth
-case "${1:-}" in
-  -h|--help)
-    cat <<USAGE
-Usage: ./${0##*/} [-h | --help]
+DRY_RUN=0
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -h|--help)
+      cat <<USAGE
+Usage: ./${0##*/} [--dry-run] [-h | --help]
 
   Delete users from a Synology NAS.
 
@@ -14,16 +15,27 @@ Usage: ./${0##*/} [-h | --help]
   Server config: nas.conf in the same directory
 
 Options:
+  --dry-run     Skip the mutating DELETE POST; authentication session +
+                existence lookup still run.
   -h, --help    Show this help and exit
 
 Flow:
   1) Query NAS API info -> authenticate Core session
   2) Iterate USERNAMES: verify existence, then delete
 USAGE
-    exit 0
-    ;;
-esac
+      exit 0
+      ;;
+    --dry-run) DRY_RUN=1; shift ;;
+    --) shift; break ;;
+    -*) echo "ERROR: unknown option: $1" >&2; exit 2 ;;
+    *)  break ;;
+  esac
+done
 
+# Resolve script path portably across bash and zsh (BASH_SOURCE → $0 fallback).
+_SCRIPT_PATH="${BASH_SOURCE[0]:-$0}"
+SCRIPT_DIR="$(cd "$(dirname "$_SCRIPT_PATH")" && pwd)"
+unset _SCRIPT_PATH
 # --- Inline NAS config (was nas.conf in the source repo) ---
 NAS_IP="192.0.2.5"
 NAS_URL="http://${NAS_IP}:5000"
@@ -39,24 +51,14 @@ GROUP_NAME="UserMember"
 EMAIL_DOMAIN="example.com"
 DEFAULT_PASSWORD="CHANGE_ME"
 
-# List of users to be deleted
-# Add or remove usernames as needed
 USERNAMES=(
   example_user
 )
 
-# Initialize API Information
-# -------------------------
-# Retrieve API information for required Synology APIs
-# This step is necessary to ensure all required APIs are available
 echo "▸ Getting API Info..."
 API_INFO=$(curl -s -X GET "$NAS_URL/webapi/entry.cgi?api=SYNO.API.Info&version=1&method=query&query=SYNO.API.Auth,SYNO.Core.User")
 echo "API Info Response: $API_INFO"
 
-# Authentication - Core Session
-# ----------------------------
-# Authenticate with NAS for core operations
-# This session is required for user management
 echo "▸ Attempting to authenticate with NAS (Core session)..."
 CORE_AUTH_RESPONSE=$(curl -s -X POST "$NAS_URL/webapi/entry.cgi" \
   --data-urlencode "api=SYNO.API.Auth" \
@@ -69,10 +71,8 @@ CORE_AUTH_RESPONSE=$(curl -s -X POST "$NAS_URL/webapi/entry.cgi" \
 
 echo "Core Auth Response: $CORE_AUTH_RESPONSE"
 
-# Extract Core Session ID
 CORE_SID=$(echo $CORE_AUTH_RESPONSE | jq -r '.data.sid')
 
-# Validate Core authentication
 if [ -z "$CORE_SID" ] || [ "$CORE_SID" = "null" ]; then
     echo "✗ Failed to authenticate with NAS (Core session)"
     echo "Error details:"
@@ -83,12 +83,7 @@ fi
 echo "✔ Successfully authenticated with NAS (Core session)"
 echo "----------------------------------------"
 
-# User Deletion Loop
-# ----------------
-# Process each username in the USERNAMES array
 for USERNAME in "${USERNAMES[@]}"; do
-  # Check for existing user
-  # Verifies if the user exists before attempting deletion
   echo "▸ Checking if user '$USERNAME' exists..."
   USER_INFO=$(curl -s -X POST "$NAS_URL/webapi/entry.cgi" \
     --data-urlencode "api=SYNO.Core.User" \
@@ -97,7 +92,6 @@ for USERNAME in "${USERNAMES[@]}"; do
     --data-urlencode "name=$USERNAME" \
     --data-urlencode "_sid=$CORE_SID")
   
-  # Skip if user doesn't exist
   if echo "$USER_INFO" | jq -e '.error' >/dev/null; then
     echo "▲  User '$USERNAME' does not exist!"
     echo "----------------------------------------"
@@ -105,9 +99,15 @@ for USERNAME in "${USERNAMES[@]}"; do
   fi
 
   echo "▸  Deleting user: $USERNAME"
-  
-  # Delete user
-  # Removes the user account from the NAS system
+
+  if [[ "$DRY_RUN" == "1" ]]; then
+    echo "    (dry-run) POST $NAS_URL/webapi/entry.cgi api=SYNO.Core.User method=delete name=$USERNAME"
+    echo "✔ (dry-run) plan for '$USERNAME' printed"
+    echo ""
+    echo "----------------------------------------"
+    continue
+  fi
+
   DELETE_RESPONSE=$(curl -s -X POST "$NAS_URL/webapi/entry.cgi" \
     --data-urlencode "api=SYNO.Core.User" \
     --data-urlencode "version=1" \
@@ -115,7 +115,6 @@ for USERNAME in "${USERNAMES[@]}"; do
     --data-urlencode "name=$USERNAME" \
     --data-urlencode "_sid=$CORE_SID")
 
-  # Verify deletion success
   if echo "$DELETE_RESPONSE" | jq -e '.success == true' >/dev/null; then
     echo "✔ User '$USERNAME' deleted successfully"
   else
@@ -128,10 +127,6 @@ for USERNAME in "${USERNAMES[@]}"; do
   echo "----------------------------------------"
 done
 
-# Session Cleanup
-# -------------
-# Logout from Core session
-# This ensures proper cleanup of authentication session
 curl -s -X POST "$NAS_URL/webapi/entry.cgi" \
   --data-urlencode "api=SYNO.API.Auth" \
   --data-urlencode "version=7" \

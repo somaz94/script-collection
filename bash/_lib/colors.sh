@@ -1,13 +1,14 @@
+# shellcheck shell=bash
 # =============================================================================
-# scripts/lib/colors.sh — 공용 ANSI 색상 변수
+# scripts/lib/colors.sh — Shared ANSI color variables
 # =============================================================================
-# scripts/ 하위 bash 스크립트들이 공유하는 ANSI 색상 변수 모음.
-# TTY 가 아니거나 NO_COLOR 환경변수가 설정된 경우 모든 변수를 빈 문자열로 둠.
+# When stdout is not a TTY or NO_COLOR is set, every variable is left as
+# an empty string so the call sites stay neutral.
 #
-# 사용:
-#   source "$(dirname "${BASH_SOURCE[0]}")/<상대경로>/lib/colors.sh"
+# Usage:
+#   source "$(dirname "${BASH_SOURCE[0]}")/<relative-path>/lib/colors.sh"
 #
-# 멱등성을 위해 가드 처리 — 한 스크립트에서 여러 모듈이 source 해도 안전.
+# Idempotent guard — safe to source multiple times from the same script.
 # =============================================================================
 
 [[ -n "${__SCRIPTS_LIB_COLORS_LOADED:-}" ]] && return 0

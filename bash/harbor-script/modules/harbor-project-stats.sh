@@ -2,10 +2,6 @@
 set -euo pipefail
 IFS=$'\n\t'
 
-# Harbor Project Statistics Module (English Version) - Simple Version
-# Description: Module for querying artifact counts by repository for specific Harbor projects
-
-# Show repository statistics for a specific project
 show_project_repositories_stats() {
     local project_name="$1"
     
@@ -17,11 +13,10 @@ show_project_repositories_stats() {
     
     echo -e "${GREEN}=== Repository Artifact Counts for Project '${project_name}' ===${NC}\n"
     
-    # Query repository list for the project via Harbor API
     echo -e "${YELLOW}Fetching repository list...${NC}"
     
     local api_url="${HARBOR_PROTOCOL}://${HARBOR_URL}/api/v2.0/projects/${project_name}/repositories"
-    local response
+    local response=""
     
     response=$(curl -s -k -H "Accept: application/json" -u "$HARBOR_USER:$HARBOR_PASS" "$api_url")
     
@@ -30,21 +25,18 @@ show_project_repositories_stats() {
         return 1
     fi
     
-    # Check if JSON response is empty or contains errors
     if [[ -z "$response" ]] || echo "$response" | grep -q '"errors"'; then
         echo -e "${RED}Error: Cannot fetch repository list for project '${project_name}'.${NC}"
         echo "Response: $response"
         return 1
     fi
     
-    # Check if response is a JSON array
     if ! echo "$response" | jq -e '. | type == "array"' >/dev/null 2>&1; then
         echo -e "${RED}Error: Unexpected response format.${NC}"
         return 1
     fi
     
-    # Check repository count
-    local repo_count
+    local repo_count=""
     repo_count=$(echo "$response" | jq '. | length' 2>/dev/null)
     
     if [[ -z "$repo_count" ]] || [[ "$repo_count" == "0" ]]; then
@@ -54,14 +46,12 @@ show_project_repositories_stats() {
     
     echo -e "${GREEN}Found ${repo_count} repositories in total.${NC}\n"
     
-    # Print table header
     printf "%-4s %-40s %-15s %-20s\n" "No." "Repository Name" "Artifact Count" "Last Updated"
     printf "%-4s %-40s %-15s %-20s\n" "----" "----------------------------------------" "---------------" "--------------------"
     
     local total_artifacts=0
     local repo_number=1
     
-    # Process each repository's information
     while read -r repo_data; do
         if [[ -z "$repo_data" ]] || [[ "$repo_data" == "null" ]]; then
             continue
@@ -75,12 +65,10 @@ show_project_repositories_stats() {
         artifact_count=$(echo "$repo_data" | jq -r '.artifact_count // 0')
         update_time=$(echo "$repo_data" | jq -r '.update_time // "N/A"')
         
-        # Format time (from ISO 8601 to readable format)
         if [[ "$update_time" != "N/A" ]] && [[ "$update_time" != "null" ]]; then
             update_time=$(echo "$update_time" | sed 's/T/ /' | sed 's/\.[0-9]*Z$//')
         fi
         
-        # Color coding based on artifact count
         local color_code=""
         if [[ $artifact_count -gt 100 ]]; then
             color_code="$RED"
@@ -92,8 +80,7 @@ show_project_repositories_stats() {
             color_code="$GREEN"
         fi
         
-        # Remove project name from repository name for cleaner display
-        local clean_repo_name
+        local clean_repo_name=""
         clean_repo_name=$(echo "$repo_name" | sed "s|^${project_name}/||")
         
         printf "${color_code}%-4d %-40s %-15d %-20s${NC}\n" \
@@ -104,7 +91,6 @@ show_project_repositories_stats() {
         
     done < <(echo "$response" | jq -c '.[]')
     
-    # Print summary information
     echo -e "\n${GREEN}=== Summary ===${NC}"
     echo -e "${YELLOW}Total Repositories:${NC} $repo_count"
     echo -e "${YELLOW}Total Artifacts:${NC} $total_artifacts"
@@ -113,7 +99,6 @@ show_project_repositories_stats() {
     return 0
 }
 
-# Help function
 show_stats_help() {
     echo -e "${GREEN}=== Harbor Project Repository Statistics Help ===${NC}\n"
     
@@ -134,13 +119,13 @@ show_stats_help() {
     echo -e "${GREEN}  Green${NC} - 10 or fewer artifacts"
     
     echo -e "\n${YELLOW}Notes:${NC}"
-    echo -e "  • harbor-config-en.sh must be loaded before using this module."
+    echo -e "  • harbor-config.sh must be loaded before using this module."
     echo -e "  • HARBOR_URL, HARBOR_USER, HARBOR_PASS variables must be set."
 }
 
-# Handle direct execution of this module
-if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+# Main-or-source guard — zsh lacks BASH_SOURCE; :-} fallback gives empty string so the guard passes naturally.
+if [[ "${BASH_SOURCE[0]:-}" == "${0}" ]]; then
     echo -e "${YELLOW}This module should be loaded via source from another script.${NC}"
-    echo -e "${CYAN}Usage: source harbor-project-stats-en.sh${NC}"
+    echo -e "${CYAN}Usage: source harbor-project-stats.sh${NC}"
     exit 1
 fi

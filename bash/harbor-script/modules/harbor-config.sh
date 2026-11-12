@@ -2,12 +2,7 @@
 set -euo pipefail
 IFS=$'\n\t'
 
-# Harbor Configuration Module
-# Manages configuration-related functions
 
-# -- DEFINE GLOBAL VARIABLES --
-
-# Default configuration values
 DEFAULT_HARBOR_URL="harbor.example.com"           # Default Harbor registry URL
 DEFAULT_HARBOR_PROTOCOL="https"                  # Default protocol (http/https) for Harbor API — matches harbor-helm externalURL
 DEFAULT_HARBOR_USER="admin"                      # Default Harbor admin username
@@ -21,10 +16,12 @@ DEFAULT_AUTO_CONFIRM=false                       # Default auto confirm setting 
 DEFAULT_REPOSITORIES=("admin")                    # Default repositories to process within the project
 
 # Colors for output — scripts/lib/colors.sh
+# Resolve script path portably across bash and zsh (BASH_SOURCE → $0 fallback).
+_SCRIPT_PATH="${BASH_SOURCE[0]:-$0}"
 # shellcheck disable=SC1091
-source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../../lib/colors.sh"
+source "$(cd "$(dirname "$_SCRIPT_PATH")" && pwd)/../../_lib/colors.sh"
+unset _SCRIPT_PATH
 
-# Print help message
 show_help() {
     echo "Usage: $0 [options]"
     echo "Options:"
@@ -44,7 +41,6 @@ show_help() {
     echo "  $0 -p <project> -r all -k 50"
 }
 
-# Function to validate configuration
 validate_config() {
     if [ -z "$HARBOR_URL" ] || [ -z "$HARBOR_USER" ] || [ -z "$HARBOR_PASS" ] || [ -z "$PROJECT_NAME" ]; then
         echo -e "${RED}Error: Please fill in all configuration variables in the script${NC}"
@@ -57,12 +53,10 @@ validate_config() {
     fi
 }
 
-# -- PARSE COMMAND LINE ARGUMENTS --
 parse_arguments() {
     local print_help=false
     local repo_set=false
     
-    # Initialize empty REPOSITORIES array
     REPOSITORIES=()
     
     while [[ $# -gt 0 ]]; do
@@ -109,21 +103,17 @@ parse_arguments() {
         esac
     done
     
-    # Display help if requested
     if [ "$print_help" = true ]; then
         show_help
         exit 0
     fi
     
-    # Set default repositories if none specified
     if [ ${#REPOSITORIES[@]} -eq 0 ]; then
         REPOSITORIES=("${DEFAULT_REPOSITORIES[@]}")
     fi
 }
 
-# -- INITIALIZE CONFIGURATION --
 initialize_config() {
-    # Set default values if not specified
     HARBOR_URL="${HARBOR_URL:-$DEFAULT_HARBOR_URL}"
     HARBOR_PROTOCOL="${HARBOR_PROTOCOL:-$DEFAULT_HARBOR_PROTOCOL}"
     HARBOR_USER="${HARBOR_USER:-$DEFAULT_HARBOR_USER}"
@@ -135,20 +125,18 @@ initialize_config() {
     DRY_RUN="${DRY_RUN:-$DEFAULT_DRY_RUN}"
     BATCH_SIZE="${BATCH_SIZE:-$DEFAULT_BATCH_SIZE}"
     
-    # Make sure BATCH_SIZE is at least 1
     if [ "$BATCH_SIZE" -lt 1 ]; then
         echo -e "${YELLOW}Invalid batch size $BATCH_SIZE, setting to 1${NC}"
         BATCH_SIZE=1
     fi
 }
 
-# Function to validate if required commands exist
 check_requirements() {
     local missing_commands=()
     
     for cmd in curl jq; do
-        if ! command -v $cmd &> /dev/null; then
-            missing_commands+=($cmd)
+        if ! command -v "$cmd" &> /dev/null; then
+            missing_commands+=("$cmd")
         fi
     done
     

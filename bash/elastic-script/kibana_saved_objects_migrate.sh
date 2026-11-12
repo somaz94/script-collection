@@ -1,13 +1,26 @@
 #!/usr/bin/env bash
+# bash + zsh compatible: re-exec under bash if invoked through zsh BEFORE
+# enabling shell options. The body uses `echo -e` and sources lib helpers
+# — both depend on bash semantics.
+if [ -n "${ZSH_VERSION:-}" ]; then
+  exec /usr/bin/env bash "$0" "$@"
+fi
 set -euo pipefail
 IFS=$'\n\t'
 
-# Shared lib — scripts/lib/{prompts,es-helpers}.sh
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Shared lib — repo-root scripts/lib/prompts.sh + ./lib/es-helpers.sh
+# Resolve script path portably across bash and zsh (BASH_SOURCE → $0 fallback).
+_SCRIPT_PATH="${BASH_SOURCE[0]:-$0}"
+SCRIPT_DIR="$(cd "$(dirname "$_SCRIPT_PATH")" && pwd)"
+unset _SCRIPT_PATH
 # shellcheck disable=SC1091
 source "${SCRIPT_DIR}/../_lib/prompts.sh"
 # shellcheck disable=SC1091
 source "${SCRIPT_DIR}/../_lib/es-helpers.sh"
+
+# This script's only cluster call is the SOURCE-password secret read, so name that
+# secret as the collision rather than es-helpers.sh's port-forward default.
+KUBE_CONTEXT_HINT="monitoring/elasticsearch-master-credentials (the SOURCE password)"
 
 ###################
 # Global Variables #
@@ -22,12 +35,13 @@ SOURCE_PASSWORD=""
 # TARGET Kibana (new stack, logging ns, ECK-managed)
 TARGET_HOST="https://kibana-eck.example.com"
 TARGET_USER="elastic"
-TARGET_PASSWORD="CHANGE_ME"
+# Empty -> auto-fetch from the TARGET cluster's own secret logging/elasticsearch-es-elastic-user.
+# It used to carry the on-prem admin password inline, which is both a credential in the
+# repo and a cross-cluster hazard now that --context makes the cluster selectable.
+TARGET_PASSWORD=""
 
-# Saved object types to migrate (comma-separated)
 SAVED_OBJECT_TYPES="dashboard,visualization,search,index-pattern,lens,map,canvas-workpad,tag"
 
-# NDJSON export/import file path
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 NDJSON_FILE="/tmp/kibana-saved-objects-${TIMESTAMP}.ndjson"
 
@@ -36,7 +50,10 @@ MODE=""
 OVERWRITE=false
 LIST_TARGET=false
 
-# Help function
+# Dry-run — when set, the mutating POST /api/saved_objects/_import is printed
+# but not executed; export + list paths are read-only and run as usual.
+DRY_RUN=0
+
 show_help() {
   cat << EOF
 Usage: $(basename "$0") [OPTIONS]
@@ -58,14 +75,27 @@ Modes (pick one):
       --list-target       Show per-type counts on TARGET
 
 Connection options:
+      --context CTX              kube-context used ONLY to auto-fetch the SOURCE
+                                 password from a Kubernetes secret. Required
+                                 unless --source-password is given, in which case
+                                 this script never touches a cluster. There is no
+                                 fallback to the current context — both clusters
+                                 hold identically named secrets, so an implicit
+                                 context reads the wrong cluster's credentials.
+                                 The name is a LOCAL kubeconfig alias with no
+                                 fixed value — list yours with
+                                 \`kubectl config get-contexts -o name\`.
       --source URL               SOURCE Kibana host (default: ${SOURCE_HOST})
       --source-user USER         SOURCE user (default: ${SOURCE_USER})
       --source-password PW       SOURCE password
                                  (if empty, auto-fetched from
-                                  monitoring/elasticsearch-master-credentials)
+                                  monitoring/elasticsearch-master-credentials —
+                                  this is what makes --context required)
       --target URL               TARGET Kibana host (default: ${TARGET_HOST})
       --target-user USER         TARGET user (default: ${TARGET_USER})
-      --target-password PW       TARGET password (default: ${TARGET_PASSWORD})
+      --target-password PW       TARGET password (if empty, auto-fetched from
+                                 logging/elasticsearch-es-elastic-user — this is
+                                 the other reason --context may be required)
 
 Data options:
   -f, --file PATH         NDJSON file path
@@ -73,6 +103,10 @@ Data options:
   -t, --types LIST        Comma-separated saved-object types
                           (default: ${SAVED_OBJECT_TYPES})
   -o, --overwrite         On import, overwrite conflicting objects (default: skip)
+      --dry-run           Print the mutating POST /api/saved_objects/_import
+                          call without executing. Export / list paths still
+                          run (read-only). The import confirm prompt is
+                          auto-skipped.
 
 Misc:
   -h, --help              Show this help
@@ -103,23 +137,42 @@ fetch_source_password() {
     if [ -n "$SOURCE_PASSWORD" ]; then
         return 0
     fi
-    echo "> Fetching SOURCE password from monitoring/elasticsearch-master-credentials..."
+    # The secret read is the ONLY cluster call this script makes, so the kube-context
+    # gate lives here rather than at startup — a run that passes --source-password
+    # never touches a cluster and should not be forced to name one.
+    require_kube_context
+    echo "▸ Fetching SOURCE password from ${KUBE_CONTEXT} (cluster=$(kube_context_cluster))"
+    echo "  secret: monitoring/elasticsearch-master-credentials"
     SOURCE_PASSWORD=$(es_fetch_password_from_k8s monitoring elasticsearch-master-credentials password) || {
         echo "  Pass --source-password explicitly." >&2
         exit 1
     }
-    echo "v SOURCE password fetched"
+    echo "✓ SOURCE password fetched"
     echo ""
 }
 
-# Build a JSON array literal from a comma-separated type list
+# Auto-fetch TARGET password from the ECK secret — mirrors fetch_source_password.
+fetch_target_password() {
+    if [ -n "$TARGET_PASSWORD" ]; then
+        return 0
+    fi
+    require_kube_context
+    echo "▸ Fetching TARGET password from ${KUBE_CONTEXT} (cluster=$(kube_context_cluster))"
+    echo "  secret: logging/elasticsearch-es-elastic-user"
+    TARGET_PASSWORD=$(es_fetch_password_from_k8s logging elasticsearch-es-elastic-user elastic) || {
+        echo "  Pass --target-password explicitly." >&2
+        exit 1
+    }
+    echo "✓ TARGET password fetched"
+    echo ""
+}
+
 build_types_json() {
     echo "$1" | awk -F',' '{
         for (i=1; i<=NF; i++) printf "\"%s\"%s", $i, (i==NF ? "" : ",")
     }'
 }
 
-# Pretty-print JSON — delegates to lib es_pretty_json
 pretty_json() {
     es_pretty_json "$1"
 }
@@ -129,8 +182,9 @@ pretty_json() {
 ###################
 
 do_list() {
-    local host user pw label
+    local host="" user="" pw="" label=""
     if [ "$LIST_TARGET" = true ]; then
+        fetch_target_password
         host="$TARGET_HOST"; user="$TARGET_USER"; pw="$TARGET_PASSWORD"
         label="TARGET ($TARGET_HOST)"
     else
@@ -140,18 +194,18 @@ do_list() {
     fi
 
     echo "=========================================="
-    echo "> Saved Objects inventory: $label"
+    echo "▸ Saved Objects inventory: $label"
     echo "=========================================="
 
     IFS=',' read -ra TYPES <<< "$SAVED_OBJECT_TYPES"
     local total=0
     local fail=0
     for t in "${TYPES[@]}"; do
-        local resp count
+        local resp="" count=""
         resp=$(es_curl "$user" "$pw" \
             -H 'kbn-xsrf: true' \
             "$host/api/saved_objects/_find?type=${t}&per_page=1&fields=id")
-        count=$(echo "$resp" | grep -o '"total":[0-9]*' | head -1 | cut -d: -f2)
+        count=$(echo "$resp" | grep -o '"total":[0-9]*' | head -1 | cut -d: -f2 || true)
         if [ -z "$count" ]; then
             printf "  %-18s : (query failed)\n" "$t"
             fail=$((fail + 1))
@@ -164,7 +218,7 @@ do_list() {
     printf "  %-18s : %d\n" "TOTAL" "$total"
     echo "=========================================="
     if [ "$fail" -gt 0 ]; then
-        echo "! ${fail} type(s) failed to query - check auth/host" >&2
+        echo "▲ ${fail} type(s) failed to query — check auth/host" >&2
         exit 1
     fi
 }
@@ -177,14 +231,14 @@ do_export() {
     fetch_source_password
 
     echo "=========================================="
-    echo "> Saved Objects Export"
+    echo "▸ Saved Objects Export"
     echo "=========================================="
     echo "SOURCE : $SOURCE_HOST"
     echo "Types  : $SAVED_OBJECT_TYPES"
     echo "File   : $NDJSON_FILE"
     echo "=========================================="
 
-    local types_json http_code
+    local types_json="" http_code=""
     types_json=$(build_types_json "$SAVED_OBJECT_TYPES")
 
     http_code=$(es_curl "$SOURCE_USER" "$SOURCE_PASSWORD" \
@@ -194,7 +248,7 @@ do_export() {
         -o "$NDJSON_FILE" -w "%{http_code}")
 
     if [ "$http_code" != "200" ]; then
-        echo "x Export failed (HTTP $http_code)" >&2
+        echo "✗ Export failed (HTTP $http_code)" >&2
         if [ -s "$NDJSON_FILE" ]; then
             echo "Response body (first 500B):" >&2
             head -c 500 "$NDJSON_FILE" >&2; echo >&2
@@ -205,7 +259,7 @@ do_export() {
 
     local lines
     lines=$(wc -l < "$NDJSON_FILE" | tr -d ' ')
-    echo "v Export complete: $NDJSON_FILE (${lines} lines)"
+    echo "✓ Export complete: $NDJSON_FILE (${lines} lines)"
     # Last NDJSON line is the summary: {"exportedCount":N,"missingRefCount":M,...}
     local summary
     summary=$(tail -1 "$NDJSON_FILE" 2>/dev/null | grep -o '"exportedCount":[0-9]*,"missingRefCount":[0-9]*' || true)
@@ -220,30 +274,30 @@ do_export() {
 
 do_import() {
     if [ ! -f "$NDJSON_FILE" ]; then
-        echo "x File not found: $NDJSON_FILE" >&2
+        echo "✗ File not found: $NDJSON_FILE" >&2
         exit 1
     fi
     local lines
     lines=$(wc -l < "$NDJSON_FILE" | tr -d ' ')
     if [ "$lines" -eq 0 ]; then
-        echo "x File is empty: $NDJSON_FILE" >&2
+        echo "✗ File is empty: $NDJSON_FILE" >&2
         exit 1
     fi
 
     echo "=========================================="
-    echo "> Saved Objects Import"
+    echo "▸ Saved Objects Import"
     echo "=========================================="
-    echo "TARGET   : $TARGET_HOST"
-    echo "File     : $NDJSON_FILE (${lines} lines)"
+    echo "TARGET    : $TARGET_HOST"
+    echo "File      : $NDJSON_FILE (${lines} lines)"
     if [ "$OVERWRITE" = true ]; then
-        echo "Conflict : overwrite (replace existing objects)"
+        echo "Conflict  : overwrite (replace existing objects)"
     else
-        echo "Conflict : skip (default - keep existing objects)"
+        echo "Conflict  : skip (default — keep existing objects)"
     fi
     echo "=========================================="
     echo ""
-    if ! confirm_yes_no "Proceed with import?"; then
-        echo "Aborted."
+    if [[ "$DRY_RUN" != "1" ]] && ! confirm_yes_no "Proceed with import?"; then
+        echo "Operation cancelled."
         exit 0
     fi
     echo ""
@@ -251,7 +305,14 @@ do_import() {
     local url_params=""
     [ "$OVERWRITE" = true ] && url_params="?overwrite=true"
 
+    if [[ "$DRY_RUN" == "1" ]]; then
+        echo "    (dry-run) POST $TARGET_HOST/api/saved_objects/_import${url_params} --form file=@$NDJSON_FILE"
+        echo "✓ (dry-run) Import plan printed — no changes made."
+        return 0
+    fi
+
     local resp
+    fetch_target_password
     resp=$(es_curl "$TARGET_USER" "$TARGET_PASSWORD" \
         -H 'kbn-xsrf: true' \
         -X POST "$TARGET_HOST/api/saved_objects/_import${url_params}" \
@@ -261,14 +322,15 @@ do_import() {
     pretty_json "$resp"
     echo ""
 
-    local success success_count
-    success=$(echo "$resp" | grep -o '"success":[a-z]*' | head -1 | cut -d: -f2)
-    success_count=$(echo "$resp" | grep -o '"successCount":[0-9]*' | head -1 | cut -d: -f2)
+    local success="" success_count="" error_count=""
+    success=$(echo "$resp" | grep -o '"success":[a-z]*' | head -1 | cut -d: -f2 || true)
+    success_count=$(echo "$resp" | grep -o '"successCount":[0-9]*' | head -1 | cut -d: -f2 || true)
+    error_count=$(echo "$resp" | grep -o '"errors":\[' | wc -l | tr -d ' ' || true)
 
     if [ "$success" = "true" ]; then
-        echo "v Import complete (successCount=${success_count:-?})"
+        echo "✓ Import complete (successCount=${success_count:-?})"
     else
-        echo "x Import produced errors - inspect errors[] above" >&2
+        echo "✗ Import produced errors — inspect errors[] in the response above" >&2
         echo "  (for conflicts on existing objects, retry with --overwrite)" >&2
         exit 1
     fi
@@ -280,7 +342,7 @@ do_import() {
 
 do_migrate() {
     echo "=========================================="
-    echo "> Saved Objects migrate (SOURCE -> TARGET)"
+    echo "▸ Saved Objects migrate (SOURCE → TARGET)"
     echo "=========================================="
     echo "SOURCE : $SOURCE_HOST"
     echo "TARGET : $TARGET_HOST"
@@ -294,7 +356,7 @@ do_migrate() {
     do_import
     echo ""
     echo "=========================================="
-    echo "> Migration done - verify TARGET with:"
+    echo "▸ Migration done — verify TARGET with:"
     echo "    $(basename $0) --list-target"
     echo "=========================================="
 }
@@ -323,6 +385,9 @@ while [[ $# -gt 0 ]]; do
         --list-target)
             MODE="list"; LIST_TARGET=true; shift
             ;;
+        --context)
+            KUBE_CONTEXT="$2"; shift 2
+            ;;
         --source)
             SOURCE_HOST="$2"; shift 2
             ;;
@@ -349,6 +414,9 @@ while [[ $# -gt 0 ]]; do
             ;;
         -o|--overwrite)
             OVERWRITE=true; shift
+            ;;
+        --dry-run)
+            DRY_RUN=1; shift
             ;;
         -*)
             echo "Unknown option: $1" >&2

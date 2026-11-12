@@ -6,18 +6,25 @@
 # Harbor v2.0 REST API. Designed for the example.com self-signed HTTPS setup.
 #
 # Dependencies: curl, python3 (stdlib only)
-#
-# Environment overrides:
-#   HARBOR_URL              default: https://harbor.example.com
-#   HARBOR_IP               default: 192.0.2.55   (for --resolve bypass)
-#   HARBOR_ADMIN            default: admin
-#   HARBOR_ADMIN_PASSWORD   default: read from ../values/mgmt.yaml
-#   HARBOR_NO_RESOLVE=1     skip --resolve (use OS DNS)
 # =============================================================================
+# bash + zsh compatible: re-exec under bash if invoked through zsh BEFORE
+# enabling shell options. `declare -A` (associative arrays) requires bash 4+
+# — assert below so a macOS default bash 3.2 fails fast with a clear message.
+if [ -n "${ZSH_VERSION:-}" ]; then
+  exec /usr/bin/env bash "$0" "$@"
+fi
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-VALUES_FILE="$SCRIPT_DIR/../../../cicd/harbor-helm/values/mgmt.yaml"
+if [ "${BASH_VERSINFO[0]:-0}" -lt 4 ]; then
+  echo "Error: bash 4+ required (current ${BASH_VERSION:-unknown}). On macOS, install Homebrew bash and put it at the front of PATH." >&2
+  exit 1
+fi
+
+# Resolve script path portably across bash and zsh (BASH_SOURCE → $0 fallback).
+_SCRIPT_PATH="${BASH_SOURCE[0]:-$0}"
+SCRIPT_DIR="$(cd "$(dirname "$_SCRIPT_PATH")" && pwd)"
+unset _SCRIPT_PATH
+VALUES_FILE="$SCRIPT_DIR/../../values/dev.yaml"
 
 HARBOR_URL="${HARBOR_URL:-https://harbor.example.com}"
 HARBOR_IP="${HARBOR_IP:-192.0.2.55}"
@@ -28,7 +35,7 @@ if [ -z "${HARBOR_ADMIN_PASSWORD:-}" ]; then
   fi
 fi
 if [ -z "${HARBOR_ADMIN_PASSWORD:-}" ]; then
-  echo "ERROR: HARBOR_ADMIN_PASSWORD not set and could not be read from $VALUES_FILE" >&2
+  echo "Error: HARBOR_ADMIN_PASSWORD is not set and cannot be read from $VALUES_FILE" >&2
   exit 1
 fi
 
@@ -63,8 +70,11 @@ _curl_opts() {
 api() {
   # Usage: api <METHOD> <PATH> [JSON_BODY]
   local method=$1 path=$2 body=${3:-}
-  local -a opts
-  mapfile -t opts < <(_curl_opts)
+  # Portable read into array — avoids bash-only `mapfile`, works in zsh too.
+  local -a opts=()
+  local _l
+  while IFS= read -r _l; do opts+=("$_l"); done < <(_curl_opts)
+  unset _l
   local url="${HARBOR_URL}${path}"
   if [ -n "$body" ]; then
     curl "${opts[@]}" -H "Content-Type: application/json" \
@@ -77,8 +87,11 @@ api() {
 api_status() {
   # Like api() but returns "<http_code>\n<body>". Useful for non-2xx checks.
   local method=$1 path=$2 body=${3:-}
-  local -a opts
-  mapfile -t opts < <(_curl_opts)
+  # Portable read into array — avoids bash-only `mapfile`, works in zsh too.
+  local -a opts=()
+  local _l
+  while IFS= read -r _l; do opts+=("$_l"); done < <(_curl_opts)
+  unset _l
   local url="${HARBOR_URL}${path}"
   local resp
   if [ -n "$body" ]; then
@@ -96,7 +109,7 @@ api_status() {
 # Output helpers
 # -----------------------------------------------
 
-_die()  { echo "${RED}ERROR:${NC} $*" >&2; exit 1; }
+_die()  { echo "${RED}Error:${NC} $*" >&2; exit 1; }
 _info() { echo "${BLUE}→${NC} $*" >&2; }
 _ok()   { echo "${GREEN}✓${NC} $*" >&2; }
 _warn() { echo "${YELLOW}!${NC} $*" >&2; }
@@ -134,7 +147,7 @@ for g in data:
 role_id() {
   local name=$1
   local id="${ROLES[${name,,}]:-}"
-  [ -n "$id" ] || _die "unknown role '$name'. valid: ${!ROLES[*]}"
+  [ -n "$id" ] || _die "Unknown role: '$name'. Available: ${!ROLES[*]}"
   echo "$id"
 }
 
@@ -168,7 +181,7 @@ cmd_user_info() {
   local who=$1
   local id
   id=$(find_user_id "$who") || true
-  [ -n "$id" ] || _die "user not found: $who"
+  [ -n "$id" ] || _die "User not found: $who"
   api GET "/api/v2.0/users/$id" | python3 -m json.tool
 }
 
@@ -176,26 +189,26 @@ cmd_promote() {
   local who=$1
   local id
   id=$(find_user_id "$who") || true
-  [ -n "$id" ] || _die "user not found: $who (must have logged in via OIDC at least once)"
-  _info "promoting user_id=$id ($who) → sysadmin"
-  local resp code
+  [ -n "$id" ] || _die "User not found: $who (must have logged in via OIDC at least once)"
+  _info "user_id=$id ($who) → promoting to sysadmin"
+  local resp="" code=""
   resp=$(api_status PUT "/api/v2.0/users/$id/sysadmin" '{"sysadmin_flag":true}')
   code=$(echo "$resp" | head -1)
-  [ "$code" = "200" ] || _die "promote failed (HTTP $code): $(echo "$resp" | tail -n +2)"
-  _ok "promoted: $who is now sysadmin"
+  [ "$code" = "200" ] || _die "Promotion failed (HTTP $code): $(echo "$resp" | tail -n +2)"
+  _ok "Promoted: $who is now sysadmin"
 }
 
 cmd_demote() {
   local who=$1
   local id
   id=$(find_user_id "$who") || true
-  [ -n "$id" ] || _die "user not found: $who"
-  _info "demoting user_id=$id ($who) ← sysadmin"
-  local resp code
+  [ -n "$id" ] || _die "User not found: $who"
+  _info "user_id=$id ($who) ← demoting from sysadmin"
+  local resp="" code=""
   resp=$(api_status PUT "/api/v2.0/users/$id/sysadmin" '{"sysadmin_flag":false}')
   code=$(echo "$resp" | head -1)
-  [ "$code" = "200" ] || _die "demote failed (HTTP $code): $(echo "$resp" | tail -n +2)"
-  _ok "demoted: $who is no longer sysadmin"
+  [ "$code" = "200" ] || _die "Demotion failed (HTTP $code): $(echo "$resp" | tail -n +2)"
+  _ok "Demoted: $who is no longer sysadmin"
 }
 
 cmd_projects() {
@@ -236,7 +249,7 @@ cmd_add_member() {
   local rid
   rid=$(role_id "$role")
 
-  local kind name
+  local kind="" name=""
   if [[ "$target" == group:* ]]; then
     kind=group; name="${target#group:}"
   else
@@ -247,32 +260,32 @@ cmd_add_member() {
   if [ "$kind" = user ]; then
     local uid
     uid=$(find_user_id "$name") || true
-    [ -n "$uid" ] || _die "user not found: $name"
+    [ -n "$uid" ] || _die "User not found: $name"
     body=$(printf '{"role_id":%d,"member_user":{"user_id":%d}}' "$rid" "$uid")
   else
     local gid
     gid=$(find_group_id "$name") || true
     if [ -z "$gid" ]; then
       # Register OIDC group if missing (group_type=3 = OIDC)
-      _info "OIDC group '$name' not registered yet — creating"
+      _info "OIDC group '$name' not registered — registering now"
       local grp_body
       grp_body=$(printf '{"group_name":"%s","group_type":3,"ldap_group_dn":"%s"}' "$name" "$name")
-      local resp code
+      local resp="" code=""
       resp=$(api_status POST "/api/v2.0/usergroups" "$grp_body")
       code=$(echo "$resp" | head -1)
-      [[ "$code" =~ ^(200|201)$ ]] || _die "failed to create group (HTTP $code)"
+      [[ "$code" =~ ^(200|201)$ ]] || _die "Group creation failed (HTTP $code)"
       gid=$(find_group_id "$name")
-      [ -n "$gid" ] || _die "group creation reported success but id not found"
-      _ok "created OIDC group: $name (id=$gid)"
+      [ -n "$gid" ] || _die "Group creation reported success but id could not be found"
+      _ok "OIDC group registered: $name (id=$gid)"
     fi
     body=$(printf '{"role_id":%d,"member_group":{"id":%d}}' "$rid" "$gid")
   fi
 
-  local resp code
+  local resp="" code=""
   resp=$(api_status POST "/api/v2.0/projects/$project/members" "$body")
   code=$(echo "$resp" | head -1)
-  [[ "$code" =~ ^(201)$ ]] || _die "add-member failed (HTTP $code): $(echo "$resp" | tail -n +2)"
-  _ok "added $kind '$name' to project '$project' as $role"
+  [[ "$code" =~ ^(201)$ ]] || _die "Failed to add member (HTTP $code): $(echo "$resp" | tail -n +2)"
+  _ok "Added $kind '$name' to project '$project' with role $role"
 }
 
 cmd_remove_member() {
@@ -282,7 +295,6 @@ cmd_remove_member() {
   if [[ "$target" =~ ^[0-9]+$ ]]; then
     mid="$target"
   else
-    # find by name
     mid=$(api GET "/api/v2.0/projects/$project/members?page_size=100" | python3 -c "
 import json, sys
 needle = sys.argv[1].lower()
@@ -291,12 +303,12 @@ for m in json.load(sys.stdin):
         print(m['id']); break
 " "$target")
   fi
-  [ -n "$mid" ] || _die "member not found in project '$project': $target"
-  local resp code
+  [ -n "$mid" ] || _die "Member not found in project '$project': $target"
+  local resp="" code=""
   resp=$(api_status DELETE "/api/v2.0/projects/$project/members/$mid")
   code=$(echo "$resp" | head -1)
-  [ "$code" = "200" ] || _die "remove-member failed (HTTP $code)"
-  _ok "removed member mid=$mid from project '$project'"
+  [ "$code" = "200" ] || _die "Failed to remove member (HTTP $code)"
+  _ok "Removed member mid=$mid from project '$project'"
 }
 
 cmd_groups() {
@@ -316,15 +328,15 @@ cmd_add_group() {
   local name=$1
   local existing
   existing=$(find_group_id "$name") || true
-  [ -z "$existing" ] || _die "group already exists: $name (id=$existing)"
+  [ -z "$existing" ] || _die "Group already exists: $name (id=$existing)"
   local body
   body=$(printf '{"group_name":"%s","group_type":3,"ldap_group_dn":"%s"}' "$name" "$name")
-  local resp code
+  local resp="" code=""
   resp=$(api_status POST "/api/v2.0/usergroups" "$body")
   code=$(echo "$resp" | head -1)
-  [[ "$code" =~ ^(200|201)$ ]] || _die "add-group failed (HTTP $code)"
-  local gid; gid=$(find_group_id "$name")
-  _ok "registered OIDC group '$name' (id=$gid)"
+  [[ "$code" =~ ^(200|201)$ ]] || _die "Group registration failed (HTTP $code)"
+  local gid=""; gid=$(find_group_id "$name")
+  _ok "OIDC group '$name' registered (id=$gid)"
 }
 
 cmd_config() {
@@ -343,7 +355,7 @@ print(f'{\"oidc_client_secret\":22s} = *** (write-only)')"
 }
 
 cmd_set_oidc() {
-  # set-oidc --name X --endpoint Y --client-id Z --client-secret W [...]
+  # set-oidc --name X --endpoint Y --client-id Z --client-secret W [...] — update OIDC config
   local name="" endpoint="" client_id="" client_secret=""
   local verify_cert=""
   local groups_claim="groups"
@@ -369,17 +381,19 @@ cmd_set_oidc() {
       --auto-onboard)    auto_onboard="$2"; shift 2 ;;
       --dry-run)         dry_run=1; shift ;;
       -y|--no-confirm)   no_confirm=1; shift ;;
-      *)                 _die "unknown option: $1" ;;
+      *)                 _die "Unknown option: $1" ;;
     esac
   done
 
+  # client_secret env var fallback
   [ -n "$client_secret" ] || client_secret="${HARBOR_OIDC_CLIENT_SECRET:-}"
 
-  [ -n "$name" ]          || _die "--name required"
-  [ -n "$endpoint" ]      || _die "--endpoint required"
-  [ -n "$client_id" ]     || _die "--client-id required"
-  [ -n "$client_secret" ] || _die "--client-secret required (or set HARBOR_OIDC_CLIENT_SECRET)"
+  [ -n "$name" ]          || _die "--name is required"
+  [ -n "$endpoint" ]      || _die "--endpoint is required"
+  [ -n "$client_id" ]     || _die "--client-id is required"
+  [ -n "$client_secret" ] || _die "--client-secret is required (or HARBOR_OIDC_CLIENT_SECRET env var)"
 
+  # auto-detect verify_cert from endpoint scheme
   if [ -z "$verify_cert" ]; then
     case "$endpoint" in
       https://*) verify_cert="true" ;;
@@ -389,6 +403,7 @@ cmd_set_oidc() {
   case "$verify_cert" in true|false) ;; *) _die "--verify-cert must be true|false";; esac
   case "$auto_onboard" in true|false) ;; *) _die "--auto-onboard must be true|false";; esac
 
+  # Build JSON body (pass special chars safely via env)
   local body
   body=$(NAME="$name" ENDPOINT="$endpoint" CID="$client_id" CSEC="$client_secret" \
          GCLAIM="$groups_claim" AGRP="$admin_group" GFILT="$group_filter" \
@@ -410,7 +425,7 @@ print(json.dumps({
   "oidc_auto_onboard": v(os.environ["AUTO"]),
 }))')
 
-  _info "target: ${HARBOR_URL}/api/v2.0/configurations"
+  _info "Target: ${HARBOR_URL}/api/v2.0/configurations"
   echo "$body" | python3 -c "
 import json, sys
 d = json.loads(sys.stdin.read())
@@ -418,7 +433,7 @@ d['oidc_client_secret'] = '***' if d.get('oidc_client_secret') else ''
 print(json.dumps(d, indent=2))" >&2
 
   if [ "$dry_run" -eq 1 ]; then
-    _ok "DRY RUN — skipping PUT"
+    _ok "DRY RUN — PUT not invoked"
     return 0
   fi
 
@@ -428,15 +443,129 @@ print(json.dumps(d, indent=2))" >&2
     read -r reply
     case "$reply" in
       y|Y|yes|YES) ;;
-      *) _info "cancelled"; exit 0 ;;
+      *) _info "Cancelled"; exit 0 ;;
     esac
   fi
 
-  local resp code
+  local resp="" code=""
   resp=$(api_status PUT "/api/v2.0/configurations" "$body")
   code=$(echo "$resp" | head -1)
-  [ "$code" = "200" ] || _die "OIDC update failed (HTTP $code): $(echo "$resp" | tail -n +2)"
-  _ok "OIDC config updated. Run 'config' to verify"
+  [ "$code" = "200" ] || _die "Failed to apply OIDC config (HTTP $code): $(echo "$resp" | tail -n +2)"
+  _ok "OIDC config applied. Verify with the 'config' command"
+}
+
+cmd_gc_status() {
+  # Garbage collection schedule + recent runs.
+  #
+  # GC is a RUNTIME setting stored in Harbor's database, not a Helm value — same
+  # category as the OIDC config above. Nothing in git describes it, so this command
+  # is how you find out what the cluster actually has.
+  _info "Schedule"
+  api GET "/api/v2.0/system/gc/schedule" | python3 -c "
+import json, sys
+raw = sys.stdin.read().strip()
+if not raw:
+    print('  (none — GC never runs unless someone triggers it by hand)')
+    raise SystemExit
+d = json.loads(raw)
+s = d.get('schedule') or {}
+print(f\"  type   = {s.get('type')}\")
+print(f\"  cron   = {s.get('cron')}   (6-field, and Harbor core runs in UTC)\")
+print(f\"  next   = {s.get('next_scheduled_time')}\")
+print(f\"  params = {d.get('job_parameters')}\")"
+
+  _info "Recent runs"
+  api GET "/api/v2.0/system/gc?page_size=5&sort=-creation_time" | python3 -c "
+import json, sys
+rows = json.loads(sys.stdin.read() or '[]')
+if not rows:
+    print('  (never run)')
+for g in rows:
+    p = {}
+    try:
+        p = json.loads(g.get('job_parameters') or '{}')
+    except ValueError:
+        pass
+    freed = p.get('freed_space')
+    freed = f\"{freed/1024**3:.1f}G\" if isinstance(freed, (int, float)) else '-'
+    print(f\"  id={g.get('id'):<5} {str(g.get('job_kind')):<14} {g.get('job_status'):<9} \"
+          f\"{(g.get('creation_time') or '')[:19]}  freed={freed} \"
+          f\"blobs={p.get('purged_blobs','-')} manifests={p.get('purged_manifests','-')}\")"
+}
+
+cmd_gc_schedule() {
+  # gc-schedule [--cron '0 0 20 * * 6'] [--delete-untagged true|false] [--workers N]
+  #
+  # Default cron is Saturday 20:00 UTC = Sunday 05:00 KST — a weekend slot that clears
+  # the backup CronJobs (etcd 02:00, app backups 03:00, harbor-db 04:00 KST) and lands
+  # when CI is quiet. GC briefly slows the registry, so do not move it into work hours.
+  local cron="0 0 20 * * 6" delete_untagged="true" workers="1"
+  local dry_run=0 no_confirm=0
+
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --cron)             cron="$2"; shift 2 ;;
+      --delete-untagged)  delete_untagged="$2"; shift 2 ;;
+      --workers)          workers="$2"; shift 2 ;;
+      --dry-run)          dry_run=1; shift ;;
+      -y|--no-confirm)    no_confirm=1; shift ;;
+      *)                  _die "Unknown option: $1" ;;
+    esac
+  done
+
+  case "$delete_untagged" in true|false) ;; *) _die "--delete-untagged must be true|false";; esac
+  case "$workers" in ''|*[!0-9]*) _die "--workers must be a number";; esac
+  # Harbor wants seconds-first cron; a 5-field expression is silently misread as a
+  # different time, so reject it here rather than discover it a week later.
+  #
+  # Counted with awk rather than `set -- $cron`: unquoted expansion glob-expands the
+  # `*` fields against the working directory in bash, and zsh does not word-split it
+  # at all. awk sees the string exactly as written in both shells.
+  local cron_fields
+  cron_fields=$(printf '%s\n' "$cron" | awk '{print NF}')
+  [ "$cron_fields" -eq 6 ] || \
+    _die "--cron must have 6 fields (sec min hour dom mon dow), got ${cron_fields}: $cron"
+
+  local body
+  body=$(CRON="$cron" DU="$delete_untagged" W="$workers" python3 -c '
+import json, os
+print(json.dumps({
+  "schedule": {"type": "Custom", "cron": os.environ["CRON"]},
+  "parameters": {
+    "delete_untagged": os.environ["DU"] == "true",
+    "workers": int(os.environ["W"]),
+  },
+}))')
+
+  _info "Target: ${HARBOR_URL}/api/v2.0/system/gc/schedule"
+  echo "$body" | python3 -m json.tool >&2
+
+  if [ "$dry_run" -eq 1 ]; then
+    _ok "DRY RUN — request not sent"
+    return 0
+  fi
+
+  if [ "$no_confirm" -eq 0 ]; then
+    printf '%s' "${YELLOW}Continue? [y/N]: ${NC}" >&2
+    local reply
+    read -r reply
+    case "$reply" in
+      y|Y|yes|YES) ;;
+      *) _info "Cancelled"; exit 0 ;;
+    esac
+  fi
+
+  # POST creates, PUT updates. Which one applies depends on whether a schedule already
+  # exists, so try POST and fall back rather than making the caller know.
+  local resp="" code=""
+  resp=$(api_status POST "/api/v2.0/system/gc/schedule" "$body")
+  code=$(echo "$resp" | head -1)
+  if [ "$code" = "409" ]; then
+    resp=$(api_status PUT "/api/v2.0/system/gc/schedule" "$body")
+    code=$(echo "$resp" | head -1)
+  fi
+  [[ "$code" =~ ^(200|201)$ ]] || _die "Failed to set GC schedule (HTTP $code): $(echo "$resp" | tail -n +2)"
+  _ok "GC schedule applied. Verify with the 'gc-status' command"
 }
 
 cmd_systeminfo() {
@@ -454,47 +583,60 @@ cmd_systeminfo() {
 
 usage() {
   cat <<EOF
-${BOLD}Harbor Admin Helper${NC}
+${BOLD}Harbor permission management helper${NC}
 
   Usage: $(basename "$0") <command> [args...]
 
 ${BOLD}User management${NC}
-  whoami                          Who am I (admin sanity check)
-  users                           List all users
+  whoami                          Show current caller (admin check)
+  users                           List users
   user-info <user|email>          Show user details
   promote <user|email>            Promote to sysadmin
   demote <user|email>             Demote from sysadmin
 
-${BOLD}Project / membership${NC}
+${BOLD}Projects / membership${NC}
   projects                        List projects
   project-members <project>       List project members
   add-member <project> <target> <role>
                                   target: username | email | group:<oidc-group>
                                   role:   project-admin | maintainer | developer | guest | limited-guest
   remove-member <project> <user|mid>
+                                  Remove by user/email or membership id (mid)
 
 ${BOLD}OIDC groups${NC}
-  groups                          List user groups
-  add-group <oidc-group-name>     Register an OIDC group (type=3)
+  groups                          List user groups (LDAP/HTTP/OIDC)
+  add-group <oidc-group-name>     Standalone OIDC group registration (type=3)
+                                  Usually unnecessary since add-member registers automatically
 
-${BOLD}OIDC config update${NC}
+${BOLD}OIDC configuration${NC}
   set-oidc --name N --endpoint E --client-id ID --client-secret S [opts]
-                                  PUT OIDC settings (supports --dry-run / -y).
-                                  optional: --verify-cert true|false (auto-true on https),
+                                  PUT OIDC config (supports --dry-run / -y).
+                                  optional: --verify-cert true|false (auto-true for https),
                                             --groups-claim, --group-filter, --user-claim,
                                             --admin-group, --scope, --auto-onboard true|false.
-                                  client-secret may be set via HARBOR_OIDC_CLIENT_SECRET env.
+                                  client-secret can also be passed via HARBOR_OIDC_CLIENT_SECRET env.
+
+${BOLD}Garbage collection${NC}
+  gc-status                       Show the GC schedule and recent runs
+  gc-schedule [opts]              Set the GC schedule (supports --dry-run / -y).
+                                  optional: --cron '<6-field>' (default '0 0 20 * * 6'
+                                              = Sat 20:00 UTC = Sun 05:00 KST),
+                                            --delete-untagged true|false (default true),
+                                            --workers N (default 1).
+                                  GC reclaims blobs no manifest references; it never
+                                  deletes a referenced image. --delete-untagged also
+                                  drops untagged manifests (stale build cache included).
 
 ${BOLD}Diagnostics${NC}
-  config                          Dump OIDC-related configuration
-  systeminfo                      Public systeminfo (auth_mode etc.)
+  config                          Dump OIDC-related config (secret excluded)
+  systeminfo                      Public systeminfo (auth_mode, etc.)
 
-${BOLD}Environment${NC}
+${BOLD}Environment variables${NC}
   HARBOR_URL                  default ${HARBOR_URL}
   HARBOR_IP                   default ${HARBOR_IP} (used for --resolve)
   HARBOR_ADMIN                default ${HARBOR_ADMIN}
-  HARBOR_ADMIN_PASSWORD       default reads from ../values/mgmt.yaml
-  HARBOR_OIDC_CLIENT_SECRET   alternative to --client-secret on set-oidc
+  HARBOR_ADMIN_PASSWORD       default auto-extracted from ../../values/dev.yaml (harbor-helm chart)
+  HARBOR_OIDC_CLIENT_SECRET   substitute for set-oidc --client-secret
   HARBOR_NO_RESOLVE=1         use OS DNS instead of --resolve
 
 ${BOLD}Examples${NC}
@@ -507,7 +649,7 @@ ${BOLD}Examples${NC}
   $(basename "$0") set-oidc --name Keycloak \\
     --endpoint https://auth.example.com/realms/user \\
     --client-id harbor --client-secret 'XXXX' --dry-run
-  # Rollback to GitLab
+  # Roll back to GitLab
   $(basename "$0") set-oidc --name GitLab \\
     --endpoint http://gitlab.example.com \\
     --client-id 'GL_APP_ID' --client-secret 'GL_SECRET' --verify-cert false
@@ -534,8 +676,10 @@ main() {
     add-group)            [ $# -ge 1 ] || _die "add-group <oidc-group-name>"; cmd_add_group "$1" ;;
     config)               cmd_config ;;
     set-oidc)             cmd_set_oidc "$@" ;;
+    gc-status)            cmd_gc_status ;;
+    gc-schedule)          cmd_gc_schedule "$@" ;;
     systeminfo)           cmd_systeminfo ;;
-    *)                    echo "unknown command: $cmd" >&2; usage 1 ;;
+    *)                    echo "Unknown command: $cmd" >&2; usage 1 ;;
   esac
 }
 

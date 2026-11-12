@@ -1,15 +1,20 @@
 #!/usr/bin/env bash
+# bash + zsh compatible: re-exec under bash if invoked through zsh BEFORE
+# enabling shell options. The body uses `echo -e` and may source lib
+# helpers — both depend on bash semantics.
+if [ -n "${ZSH_VERSION:-}" ]; then
+  exec /usr/bin/env bash "$0" "$@"
+fi
 set -euo pipefail
 IFS=$'\n\t'
 
 #############################################
 # GitLab Artifact Cleanup Tool
-# Modes: list / delete / cleanup
 #############################################
 
-# Defaults
 GITLAB_URL="${GITLAB_URL:-http://gitlab.example.com}"
-GITLAB_TOKEN="${GITLAB_TOKEN:-<your-gitlab-token>}"
+# No literal default: a committed token is readable by anyone with repo access.
+GITLAB_TOKEN="${GITLAB_TOKEN:-}"
 PROJECT_ID=""
 MODE=""
 EXPIRED_ONLY=false
@@ -17,7 +22,10 @@ DRY_RUN=false
 OLDER_THAN=""
 
 # Shared lib — scripts/lib/colors.sh, prompts.sh
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Resolve script path portably across bash and zsh (BASH_SOURCE → $0 fallback).
+_SCRIPT_PATH="${BASH_SOURCE[0]:-$0}"
+SCRIPT_DIR="$(cd "$(dirname "$_SCRIPT_PATH")" && pwd)"
+unset _SCRIPT_PATH
 # shellcheck disable=SC1091
 source "${SCRIPT_DIR}/../_lib/colors.sh"
 # shellcheck disable=SC1091
@@ -64,7 +72,6 @@ usage() {
   exit 1
 }
 
-# List projects
 list_projects() {
   echo ""
   echo -e "${CYAN}Fetching projects...${NC}"
@@ -111,7 +118,6 @@ for p in projects:
   echo ""
 }
 
-# Parse flags
 while [[ $# -gt 0 ]]; do
   case $1 in
     -p|--project)   PROJECT_ID="$2"; shift 2 ;;
@@ -126,7 +132,6 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# Validate required
 if [ -z "$GITLAB_TOKEN" ]; then
   echo -e "${RED}GitLab token is required. (-t option or GITLAB_TOKEN env var)${NC}"
   usage
@@ -151,7 +156,6 @@ fi
 
 API_URL="${GITLAB_URL}/api/v4/projects/${PROJECT_ID}"
 
-# Cutoff date for --older-than
 get_cutoff_date() {
   if [ -n "$OLDER_THAN" ]; then
     if [[ "$OSTYPE" == "darwin"* ]]; then
@@ -162,7 +166,6 @@ get_cutoff_date() {
   fi
 }
 
-# Fetch artifacts with pagination
 fetch_artifacts() {
   local page=1
   local per_page=100
@@ -204,7 +207,6 @@ print(','.join(json.dumps(i) for i in items))
 
   echo "]" >> "$tmp_file"
 
-  # Filter jobs with artifacts
   cat "$tmp_file" | python3 -c "
 import sys, json
 from datetime import datetime, timezone, timedelta
@@ -259,12 +261,10 @@ print(json.dumps(results))
   rm -f "$tmp_file"
 }
 
-# Human-readable size — delegates to lib/prompts.sh::format_human_size
 human_size() {
   format_human_size "$1"
 }
 
-# Print list
 print_list() {
   local artifacts_json="$1"
   local count
@@ -303,7 +303,6 @@ for d in data:
   echo ""
 }
 
-# Delete artifacts
 delete_artifacts() {
   local artifacts_json="$1"
   local count
